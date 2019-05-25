@@ -453,6 +453,166 @@
 </article>
 
         
+            <article class="post">
+  <header>
+    <div class="title">
+        
+            <h2><a href="https://andyyin.github.io/blog/%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/">一个 JVM 参数引发的频繁 CMS GC</a></h2>
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2019-04-03'>
+            2019-04-03</time>
+        <span class="author">涤生</span>
+        
+            <p>16 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+  
+
+  
+  <p>了解 CMS GC 的同学，一定知道 -XX:CMSScavengeBeforeRemark 参数，它是用来开启或关闭在 CMS-remark 阶段之前的清除（Young GC）尝试。</p>
+  <footer>
+    <ul class="actions">
+      <li><a href="https://andyyin.github.io/blog/%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/" class="button big">阅读</a></li>
+    </ul>
+  <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/cms-gc">CMS GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E4%BC%98%E5%8C%96">优化</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+</article>
+
+        
+            <article class="post">
+  <header>
+    <div class="title">
+        
+            <h2><a href="https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/">再次剖析 “一个 JVM 参数引发的频繁 CMS GC”</a></h2>
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2019-04-03'>
+            2019-04-03</time>
+        <span class="author">涤生</span>
+        
+            <p>7 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+  
+
+  
+  <p>前几天这篇《<a href="https://andyyin.github.io/blog/一个-jvm-参数引发的频繁-cms-gc">一个 JVM 参数引发的频繁 CMS GC</a>》文章发出之后，反应比较激烈，因为这可能与同学们通常 GC 优化经验相悖，通常有很多业务都通过添加 -XX:+CMSScavengeBeforeRemark 参数，来降低 CMS-remark 的时间，进而提升业务的性能以及可用性。</p>
+  <footer>
+    <ul class="actions">
+      <li><a href="https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/" class="button big">阅读</a></li>
+    </ul>
+  <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/cms-gc">CMS GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E4%BC%98%E5%8C%96">优化</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+</article>
+
+        
 
         
 <ul class="actions pagination">
@@ -690,7 +850,7 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">2</span>
+                <span style="float:right;">4</span>
               
             </header>
           </article>
@@ -701,7 +861,7 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">2</span>
+                <span style="float:right;">4</span>
               
             </header>
           </article>
