@@ -304,7 +304,7 @@
                         
                             /blog/
                         
-                        class="button">View more posts</a>
+                        class="button">更多</a>
                 
             </div>
         </section>
@@ -441,36 +441,36 @@
   <div id="content">
     
 
-<h2 id="说明">说明</h2>
+<h1 id="说明">说明</h1>
 
 <p>本篇原文作者是 LinkedIn 的 Swapnil Ghike，这篇文章讲述了 LinkedIn 的 Feed 产品的 GC 优化过程，虽然文章写作于 April 8, 2014，但其中的很多内容和知识点非常有参考意义。因此，翻译后献给各位同学。
 原文链接：<a href="https://engineering.linkedin.com/garbage-collection/garbage-collection-optimization-high-throughput-and-low-latency-java-applications">Garbage Collection Optimization for High-Throughput and Low-Latency Java Applications</a>。</p>
 
-<h2 id="背景">背景</h2>
+<h1 id="背景">背景</h1>
 
 <p>高性能应用构成了现代网络的支柱。LinkedIn 内部有许多高吞吐量服务来满足每秒成千上万的用户请求。为了获得最佳的用户体验，以低延迟响应这些请求是非常重要的。</p>
 
 <p>例如，我们的用户经常使用的产品是 Feed —— 它是一个不断更新的专业活动和内容的列表。Feed 在 LinkedIn 的系统中随处可见，包括公司页面、学校页面以及最重要的主页资讯信息。基础 Feed 数据平台为我们的经济图谱（会员、公司、群组等）中各种实体的更新建立索引，它必须高吞吐低延迟地实现相关的更新。
-<img src="https://upload-images.jianshu.io/upload_images/3017145-932aa0be5ce180d3.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="LinkedIn Feeds" />
+<img src="https://andyyin.github.io/img/2019/04/perf-optimize/blog-feed.png" alt="LinkedIn Feeds" />
 为了将这些高吞吐量、低延迟类型的 Java 应用程序用于生产，开发人员必须确保在应用程序开发周期的每个阶段都保持一致的性能。确定最佳垃圾收集（Garbage Collection, GC）配置对于实现这些指标至关重要。</p>
 
 <p>这篇博文将通过一系列步骤来明确需求并优化 GC，它的目标读者是对使用系统方法进行 GC 优化来实现应用的高吞吐低延迟目标感兴趣的开发人员。在 LinkedIn 构建下一代 Feed 数据平台的过程中，我们总结了该方法。这些方法包括但不限于以下几点：<a href="http://www.oracle.com/technetwork/java/javase/memorymanagement-whitepaper-150215.pdf">并发标记清除（Concurrent Mark Sweep，CMS）</a> 和 <a href="https://www.oracle.com/webfolder/technetwork/tutorials/obe/java/G1GettingStarted/index.html">G1</a> 垃圾回收器的 CPU 和内存开销、避免长期存活对象导致的持续 GC、优化 GC 线程任务分配提升性能，以及可预测 GC 停顿时间所需的 OS 配置。</p>
 
-<h2 id="优化-gc-的正确时机">优化 GC 的正确时机？</h2>
+<h1 id="优化-gc-的正确时机">优化 GC 的正确时机？</h1>
 
 <p>GC 的行为可能会因代码优化以及工作负载的变化而变化。因此，在一个已实施性能优化的接近完成的代码库上进行 GC 优化非常重要。而且在端到端的基本原型上进行初步分析也很有必要，该原型系统使用存根代码并模拟了可代表生产环境的工作负载。这样可以获取该架构延迟和吞吐量的真实边界，进而决定是否进行纵向或横向扩展。</p>
 
 <p>在下一代 Feed 数据平台的原型开发阶段，我们几乎实现了所有端到端的功能，并且模拟了当前生产基础设施提供的查询工作负载。这使我们在工作负载特性上有足够的多样性，可以在足够长的时间内测量应用程序性能和 GC 特征。</p>
 
-<h2 id="优化-gc-的步骤">优化 GC 的步骤</h2>
+<h1 id="优化-gc-的步骤">优化 GC 的步骤</h1>
 
 <p>下面是一些针对高吞吐量、低延迟需求优化 GC 的总体步骤。此外，还包括在 Feed 数据平台原型实施的具体细节。尽管我们还对 G1 垃圾收集器进行了试验，但我们发现 ParNew/CMS 具有最佳的 GC 性能。</p>
 
-<h3 id="1-理解-gc-基础知识">1. 理解 GC 基础知识</h3>
+<h2 id="1-理解-gc-基础知识">1. 理解 GC 基础知识</h2>
 
 <p>由于 GC 优化需要调整大量的参数，因此理解 GC 工作机制非常重要。Oracle 的 Hotspot JVM 内存管理<a href="https://www.oracle.com/technetwork/java/javase/memorymanagement-whitepaper-150215.pdf">白皮书</a>是开始学习 Hotspot JVM GC 算法非常好的资料。而了解 G1 垃圾回收器的理论知识，可以参阅该<a href="https://www.oracle.com/webfolder/technetwork/tutorials/obe/java/G1GettingStarted/index.html">文章</a>。</p>
 
-<h3 id="2-仔细考量-gc-需求">2. 仔细考量 GC 需求</h3>
+<h2 id="2-仔细考量-gc-需求">2. 仔细考量 GC 需求</h2>
 
 <p>为了降低对应用程序性能的开销，可以优化 GC 的一些特征。像吞吐量和延迟一样，这些 GC 特征应该在长时间运行的测试中观察到，以确保应用程序能够在经历多个 GC 周期中处理流量的变化。
 * Stop-the-world 回收器回收垃圾时会暂停应用线程。停顿的时长和频率不应该对应用遵守 SLA 产生不利的影响。
@@ -483,7 +483,7 @@
 
 <p>使用最初的 JVM 配置，每 3 秒发生一次 80ms 的 Young GC 停顿，超过 99.9% 的应用请求延迟 100ms（999线）。这样的 GC 效果可能适合于 SLA 对延迟要求不太严格应用。然而，我们的目标是尽可能减少应用请求的 999 线。GC 优化对于实现这一目标至关重要。</p>
 
-<h3 id="3-理解-gc-指标">3. 理解 GC 指标</h3>
+<h2 id="3-理解-gc-指标">3. 理解 GC 指标</h2>
 
 <p>衡量应用当前情况始终是优化的先决条件。了解 <a href="https://engineering.linkedin.com/26/tuning-java-garbage-collection-web-services">GC 日志的详细细节</a>（使用以下选项）：</p>
 
@@ -496,7 +496,7 @@
 <p>在 LinkedIn 的内部监控 <a href="https://engineering.linkedin.com/32/eric-intern-origin-ingraphs">inGraphs</a> 和报表系统 <a href="https://github.com/linkedin/naarad">Naarad</a>，生成了各种有用的指标可视化图形，比如 GC 停顿时间百分比、一次停顿最大持续时间以及长时间内 GC 频率。除了 Naarad，有很多开源工具比如 <a href="https://code.google.com/p/gclogviewer/">gclogviewer</a> 可以从 GC 日志创建可视化图形。
 在此阶段，可以确定 GC 频率和暂停持续时间是否满足应用程序满足延迟的要求。</p>
 
-<h3 id="4-降低-gc-频率">4. 降低 GC 频率</h3>
+<h2 id="4-降低-gc-频率">4. 降低 GC 频率</h2>
 
 <p>在分代 GC 算法中，降低 GC 频率可以通过：(1)降低对象分配/晋升率；(2)增加各代空间的大小。</p>
 
@@ -513,7 +513,7 @@
 
 <p>来增加触发 Old GC 的阈值。我们也试图增加 Young Gen 大小来减少 Young GC 频率，但是并没有采用，因为这增加了应用的 999 线。</p>
 
-<h3 id="5-缩短-gc-停顿时间">5. 缩短 GC 停顿时间</h3>
+<h2 id="5-缩短-gc-停顿时间">5. 缩短 GC 停顿时间</h2>
 
 <p>减少 Young Gen 大小可以缩短 Young GC 停顿时间，因为这可能导致被复制到 Survivor 区域或者被晋升的数据更少。但是，正如前面提到的，我们要观察减少 Young Gen 大小和由此导致的 GC 频率增加对于整体应用吞吐量和延迟的影响。Young GC 停顿时间也依赖于 tenuring threshold （晋升阈值）和 Old Gen 大小（如步骤 6 所示）。</p>
 
@@ -523,7 +523,7 @@
 
 <p>我们还注意到 Young GC 暂停时间随着 Old Gen 占用率上升而延长。这意味着来自 Old Gen 的压力使得对象晋升花费更多的时间。为解决这个问题，将总的堆内存大小增加到 40GB，减小 -XX:CMSInitiatingOccupancyFraction 的值到 80，更快地开始 Old GC。尽管 -XX:CMSInitiatingOccupancyFraction 的值减小了，增大堆内存可以避免频繁的 Old GC。在此阶段，我们的结果是  Young GC 暂停 70ms，应用的 999 线在 80ms。</p>
 
-<h3 id="6-优化-gc-工作线程的任务分配">6. 优化 GC 工作线程的任务分配</h3>
+<h2 id="6-优化-gc-工作线程的任务分配">6. 优化 GC 工作线程的任务分配</h2>
 
 <p>为了进一步降低 Young GC 停顿时间，我们决定研究 GC 线程绑定任务的参数来进行优化。</p>
 
@@ -531,17 +531,17 @@
 
 <p>还有一些的参数可以将任务映射到 GC 线程，如果操作系统允许的话，-XX:+BindGCTaskThreadsToCPUs 参数可以绑定 GC 线程到个别的 CPU 核。使用亲缘性 -XX:+UseGCTaskAffinity 参数可以将任务分配给 GC 工作线程。然而，我们的应用并没有从这些选项带来任何好处。实际上，一些调查显示这些选项在 Linux 系统不起作用[1,2]。</p>
 
-<h3 id="7-了解-gc-的-cpu-和内存开销">7. 了解 GC 的 CPU 和内存开销</h3>
+<h2 id="7-了解-gc-的-cpu-和内存开销">7. 了解 GC 的 CPU 和内存开销</h2>
 
 <p>并发 GC 通常会增加 CPU 使用率。虽然我们观察到 CMS 的默认设置运行良好，但是 G1 收集器的并发 GC 工作会导致 CPU 使用率的增加，显著降低了应用程序的吞吐量和延迟。与 CMS 相比，G1 还增加了内存开销。对于不受 CPU 限制的低吞吐量应用程序，GC 导致的高 CPU 使用率可能不是一个紧迫的问题。</p>
 
-<p><img src="https://upload-images.jianshu.io/upload_images/3017145-a96b1149a52ea550.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="ParNew/CMS 和 G1 的 CPU 使用百分比：相对来说 CPU 使用率变化明显的节点使用 G1
+<p><img src="https://andyyin.github.io/img/2019/04/perf-optimize/cpu-used.png" alt="ParNew/CMS 和 G1 的 CPU 使用百分比：相对来说 CPU 使用率变化明显的节点使用 G1
 选项 -XX:G1RSetUpdatingPauseTimePercent=20" /></p>
 
-<p><img src="https://upload-images.jianshu.io/upload_images/3017145-2098d0a539ce9d0e.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="ParNew/CMS 和 G1 每秒服务的请求数：吞吐量较低的节点使用 G1
+<p><img src="https://andyyin.github.io/img/2019/04/perf-optimize/throughput.png" alt="ParNew/CMS 和 G1 每秒服务的请求数：吞吐量较低的节点使用 G1
 选项 -XX:G1RSetUpdatingPauseTimePercent=20" /></p>
 
-<h3 id="8-为-gc-优化系统内存和-i-o-管理">8. 为 GC 优化系统内存和 I/O 管理</h3>
+<h2 id="8-为-gc-优化系统内存和-i-o-管理">8. 为 GC 优化系统内存和 I/O 管理</h2>
 
 <p>通常来说，GC 停顿有两种特殊情况：
 (1)低 user time，高 sys time 和高 real time
@@ -556,7 +556,7 @@
 <p>可能你会使用 mlock 将 JVM 页固定到内存中，这样操作系统就不会将它们交换出去。但是，如果系统用尽了所有的内存和交换空间，操作系统将终止一个进程来回收内存。通常情况下，Linux 内核会选择具有高驻留内存占用但运行时间不长的进程 (<a href="https://www.kernel.org/doc/gorman/html/understand/understand016.html">OOM 情况下杀死进程的工作流</a>)。
 在我们的例子中，这个进程很有可能就是我们的应用程序。优雅的降级是服务优秀的属性之一，不过服务突然终止的可能性对于可操作性来说并不好 —— 因此，我们不使用 mlock，只是通过 vm.swapability 来尽可能避免交换内存页到 swap 的惩罚。</p>
 
-<h2 id="linkedin-feed-数据平台的-gc-优化">LinkedIn Feed 数据平台的 GC 优化</h2>
+<h1 id="linkedin-feed-数据平台的-gc-优化">LinkedIn Feed 数据平台的 GC 优化</h1>
 
 <p>对于该 Feed 平台原型系统，我们使用 Hotspot JVM 的两个 GC 算法优化垃圾回收：</p>
 
@@ -579,22 +579,24 @@
 
 <p>使用这些参数，对于成千上万读请求的吞吐量，我们应用程序的 999 线降低到 60ms。</p>
 
-<h2 id="感谢">感谢</h2>
+<h1 id="感谢">感谢</h1>
 
 <p>参与了原型应用程序开发的同学有：Ankit Gupta、Elizabeth Bennett、Raghu Hiremagalur、Roshan Sumbaly、Swapnil Ghike、Tom Chiang 和 Vivek Nelamangala。
 另外，感谢 Cuong Tran、David Hoa 和 Steven Ihde 在系统优化方面的帮助。</p>
 
-<h2 id="参考">参考</h2>
+<h1 id="参考">参考</h1>
 
-<p>[1] -XX:+BindGCTaskThreadsToCPUs 参数似乎在Linux 系统上不起作用，因为 hotspot/src/os/linux/vm/os_linux.cpp 的 distribute_processes 方法在 JDK7 或 JDK8 中没有实现。
-[2] -XX:+UseGCTaskAffinity 参数在 JDK7 和 JDK8 的所有平台似乎都不起作用，因为任务的亲缘性属性永远被设置为 sentinel_worker = (uint) -1。源码见 hotspot/src/share/vm/gc_implementation/parallelScavenge/{gcTaskManager.cpp，gcTaskThread.cpp, gcTaskManager.cpp}。
-[3] G1 存在一些内存泄露的 bug，可能 Java7u51 没有修改。这个 <a href="http://bugs.java.com/bugdatabase/view_bug.do?bug_id=2212435">bug</a> 仅在 Java 8 修正了。</p>
+<p>[1] -XX:+BindGCTaskThreadsToCPUs 参数似乎在Linux 系统上不起作用，因为 hotspot/src/os/linux/vm/os_linux.cpp 的 distribute_processes 方法在 JDK7 或 JDK8 中没有实现。</p>
+
+<p>[2] -XX:+UseGCTaskAffinity 参数在 JDK7 和 JDK8 的所有平台似乎都不起作用，因为任务的亲缘性属性永远被设置为 sentinel_worker = (uint) -1。源码见 hotspot/src/share/vm/gc_implementation/parallelScavenge/{gcTaskManager.cpp，gcTaskThread.cpp, gcTaskManager.cpp}。</p>
+
+<p>[3] G1 存在一些内存泄露的 bug，可能 Java7u51 没有修改。这个 <a href="http://bugs.java.com/bugdatabase/view_bug.do?bug_id=2212435">bug</a> 仅在 Java 8 修正了。</p>
 
 <hr />
 
 <p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
 
-<p><img src="https://upload-images.jianshu.io/upload_images/3017145-277e5f278eb59205.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="涤生-微信公共号" /></p>
+<p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
 
   </div>
 
@@ -853,7 +855,7 @@
           
             /blog/
           
-        class="button">View more posts</a>
+        class="button">更多</a>
       
     </div>
   </section>
