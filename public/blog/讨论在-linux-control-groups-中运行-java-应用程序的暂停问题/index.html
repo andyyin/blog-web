@@ -1,0 +1,1147 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <script type="application/ld+json">
+    {
+        "@context" : "http://schema.org",
+        "@type" : "BlogPosting",
+        "mainEntityOfPage": {
+             "@type": "WebPage",
+             "@id": "https://andyyin.github.io"
+        },
+        "articleSection" : "blog",
+        "name" : "[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题",
+        "headline" : "[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题",
+        "description" : "说明 本篇原文来自 LinkedIn 的 Zhenyun Zhuang，原文：Application Pauses When Running JVM Inside Linux Control Groups[1]，在容器化的进程中，或多或少会对现有应用程序带来一些问题，这篇文章讲的是 LinkedIn 在使用 cgroups 构建容器化产品过程中，发现资源限制策略对 Java 应用程序性能会产生一些影响，文章深入分析问题根本原因，并给出解决方案。笔者看过后，觉得非常赞，因此翻译后献给大家，希望对大家有帮助。
+前言 基于 Linux cgroups[2]的解决方案（例如，Docker[3]，CoreOS[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的容器化[5]产品 LPS[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 CFS[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。 这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况： 1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。
+ 多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。  在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言： 1.",
+        "inLanguage" : "zh",
+        "author" : "",
+        "creator" : "",
+        "publisher": "",
+        "accountablePerson" : "",
+        "copyrightHolder" : "",
+        "copyrightYear" : "2019",
+        "datePublished": "2019-05-09 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2019-05-09 00:00:00 &#43;0000 UTC",
+        "url" : "https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/",
+        "wordCount" : "1057",
+        "keywords" : [ "Cgroup","Java","GC","STW","Blog" ]
+    }
+    </script>
+        
+            
+                <title>[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</title>
+            
+        
+
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content="Hugo 0.54.0" />
+        
+
+
+        
+            <meta name="author" content="涤生">
+        
+        
+            
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+            
+        
+
+        <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题"/>
+<meta name="twitter:description" content="说明 本篇原文来自 LinkedIn 的 Zhenyun Zhuang，原文：Application Pauses When Running JVM Inside Linux Control Groups[1]，在容器化的进程中，或多或少会对现有应用程序带来一些问题，这篇文章讲的是 LinkedIn 在使用 cgroups 构建容器化产品过程中，发现资源限制策略对 Java 应用程序性能会产生一些影响，文章深入分析问题根本原因，并给出解决方案。笔者看过后，觉得非常赞，因此翻译后献给大家，希望对大家有帮助。
+前言 基于 Linux cgroups[2]的解决方案（例如，Docker[3]，CoreOS[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的容器化[5]产品 LPS[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 CFS[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。 这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况： 1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。
+ 多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。  在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言： 1."/>
+
+        <meta property="og:title" content="[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题" />
+<meta property="og:description" content="说明 本篇原文来自 LinkedIn 的 Zhenyun Zhuang，原文：Application Pauses When Running JVM Inside Linux Control Groups[1]，在容器化的进程中，或多或少会对现有应用程序带来一些问题，这篇文章讲的是 LinkedIn 在使用 cgroups 构建容器化产品过程中，发现资源限制策略对 Java 应用程序性能会产生一些影响，文章深入分析问题根本原因，并给出解决方案。笔者看过后，觉得非常赞，因此翻译后献给大家，希望对大家有帮助。
+前言 基于 Linux cgroups[2]的解决方案（例如，Docker[3]，CoreOS[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的容器化[5]产品 LPS[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 CFS[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。 这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况： 1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。
+ 多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。  在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言： 1." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/" />
+<meta property="article:published_time" content="2019-05-09T00:00:00&#43;00:00"/>
+<meta property="article:modified_time" content="2019-05-09T00:00:00&#43;00:00"/>
+
+        <meta property="og:image" content="https://andyyin.github.io/images/logo.png">
+        <meta property="og:image:type" content="image/png">
+        <meta property="og:image:width" content="512">
+        <meta property="og:image:height" content="512">
+        
+<meta itemprop="name" content="[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题">
+<meta itemprop="description" content="说明 本篇原文来自 LinkedIn 的 Zhenyun Zhuang，原文：Application Pauses When Running JVM Inside Linux Control Groups[1]，在容器化的进程中，或多或少会对现有应用程序带来一些问题，这篇文章讲的是 LinkedIn 在使用 cgroups 构建容器化产品过程中，发现资源限制策略对 Java 应用程序性能会产生一些影响，文章深入分析问题根本原因，并给出解决方案。笔者看过后，觉得非常赞，因此翻译后献给大家，希望对大家有帮助。
+前言 基于 Linux cgroups[2]的解决方案（例如，Docker[3]，CoreOS[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的容器化[5]产品 LPS[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 CFS[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。 这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况： 1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。
+ 多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。  在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言： 1.">
+
+
+<meta itemprop="datePublished" content="2019-05-09T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2019-05-09T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="1057">
+
+
+
+<meta itemprop="keywords" content="Cgroup,Java,GC,STW," />
+
+        
+
+        
+            
+        
+
+        
+        
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:400,800,900|Source+Sans+Pro:400,700">
+            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/main.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/add-on.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/academicons.min.css">
+        
+
+        
+            
+                
+            
+        
+
+
+  
+    
+    <link href='//cdn.bootcss.com/highlight.js/9.11.0/styles/github.min.css' rel='stylesheet' type='text/css' />
+  
+
+
+      
+    </head>
+    <body>
+
+      
+      <div id="wrapper">
+
+    
+    
+<header id="header">
+    
+      <h1><a href="https://andyyin.github.io/">涤生|个人博客</a></h1>
+    
+
+    <nav class="links">
+        <ul>
+            
+                <li>
+                    <a href="https://andyyin.github.io/">
+                            <i class="fa fa-home">&nbsp;</i>主页
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/blog/">
+                            <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/categories/">
+                            <i class="fa fa-sitemap">&nbsp;</i>分类
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/about/">
+                            <i class="fa fa-id-card-o">&nbsp;</i>关于
+                    </a>
+                </li>
+            
+        </ul>
+    </nav>
+    <nav class="main">
+        <ul>
+            
+            <li id="share-nav" class="share-menu" style="display:none;">
+                <a class="fa-share-alt" href="#share-menu">Share</a>
+            </li>
+            
+            <li class="search">
+                <a class="fa-search" href="#search">Search</a>
+                <form id="search" method="get" action="//google.com/search">
+                    <input type="text" name="q" placeholder="Search" />
+                    <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+                </form>
+            </li>
+            <li class="menu">
+                <a class="fa-bars" href="#menu">Menu</a>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+
+<section id="menu">
+
+    
+        <section>
+            <form class="search" method="get" action="//google.com/search">
+                <input type="text" name="q" placeholder="Search" />
+                <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+            </form>
+        </section>
+
+    
+        <section>
+            <ul class="links">
+                
+                    <li>
+                        <a href="https://andyyin.github.io/">
+                            <h3>
+                                <i class="fa fa-home">&nbsp;</i>主页
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/blog/">
+                            <h3>
+                                <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/categories/">
+                            <h3>
+                                <i class="fa fa-sitemap">&nbsp;</i>分类
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/about/">
+                            <h3>
+                                <i class="fa fa-id-card-o">&nbsp;</i>关于
+                            </h3>
+                        </a>
+                    </li>
+                
+            </ul>
+        </section>
+
+    
+        <section class="recent-posts">
+            <div class="mini-posts">
+                <header>
+                    <h3>Recent Posts</h3>
+                </header>
+                
+
+                
+                    
+                
+
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-19'>
+                                    May 19, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-09'>
+                                    May 9, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-21'>
+                                    April 21, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-15'>
+                                    April 15, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+
+                
+                    <a href=
+                        
+                            /blog/
+                        
+                        class="button">View more posts</a>
+                
+            </div>
+        </section>
+
+    
+        
+</section>
+
+    <section id="share-menu">
+    <section id="social-share-nav">
+        <ul class="links">
+            <header>
+                <h3>Share this post <i class="fa fa-smile-o"></i></h3>
+            </header>
+            
+
+
+
+<li>
+  <a href="//twitter.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E8%25AE%25A8%25E8%25AE%25BA%25E5%259C%25A8-linux-control-groups-%25E4%25B8%25AD%25E8%25BF%2590%25E8%25A1%258C-java-%25E5%25BA%2594%25E7%2594%25A8%25E7%25A8%258B%25E5%25BA%258F%25E7%259A%2584%25E6%259A%2582%25E5%2581%259C%25E9%2597%25AE%25E9%25A2%2598%2f&amp;text=%5b%e8%af%91%5d%e8%ae%a8%e8%ae%ba%e5%9c%a8%20Linux%20Control%20Groups%20%e4%b8%ad%e8%bf%90%e8%a1%8c%20Java%20%e5%ba%94%e7%94%a8%e7%a8%8b%e5%ba%8f%e7%9a%84%e6%9a%82%e5%81%9c%e9%97%ae%e9%a2%98&amp;via=" target="_blank" class="share-btn twitter">
+    <i class="fa fa-twitter"></i>
+    <p>Twitter</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//plus.google.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E8%25AE%25A8%25E8%25AE%25BA%25E5%259C%25A8-linux-control-groups-%25E4%25B8%25AD%25E8%25BF%2590%25E8%25A1%258C-java-%25E5%25BA%2594%25E7%2594%25A8%25E7%25A8%258B%25E5%25BA%258F%25E7%259A%2584%25E6%259A%2582%25E5%2581%259C%25E9%2597%25AE%25E9%25A2%2598%2f" target="_blank" class="share-btn google-plus">
+    <i class="fa fa-google-plus"></i>
+    <p>Google+</p>
+  </a>
+</li>
+
+
+
+
+
+<li>
+  <a href="//www.facebook.com/sharer/sharer.php?u=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E8%25AE%25A8%25E8%25AE%25BA%25E5%259C%25A8-linux-control-groups-%25E4%25B8%25AD%25E8%25BF%2590%25E8%25A1%258C-java-%25E5%25BA%2594%25E7%2594%25A8%25E7%25A8%258B%25E5%25BA%258F%25E7%259A%2584%25E6%259A%2582%25E5%2581%259C%25E9%2597%25AE%25E9%25A2%2598%2f" target="_blank" class="share-btn facebook">
+    <i class="fa fa-facebook"></i>
+    <p>Facebook</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//reddit.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E8%25AE%25A8%25E8%25AE%25BA%25E5%259C%25A8-linux-control-groups-%25E4%25B8%25AD%25E8%25BF%2590%25E8%25A1%258C-java-%25E5%25BA%2594%25E7%2594%25A8%25E7%25A8%258B%25E5%25BA%258F%25E7%259A%2584%25E6%259A%2582%25E5%2581%259C%25E9%2597%25AE%25E9%25A2%2598%2f&amp;title=%5b%e8%af%91%5d%e8%ae%a8%e8%ae%ba%e5%9c%a8%20Linux%20Control%20Groups%20%e4%b8%ad%e8%bf%90%e8%a1%8c%20Java%20%e5%ba%94%e7%94%a8%e7%a8%8b%e5%ba%8f%e7%9a%84%e6%9a%82%e5%81%9c%e9%97%ae%e9%a2%98" target="_blank" class="share-btn reddit">
+    <i class="fa fa-reddit-alien"></i>
+    <p>Reddit</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.linkedin.com/shareArticle?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E8%25AE%25A8%25E8%25AE%25BA%25E5%259C%25A8-linux-control-groups-%25E4%25B8%25AD%25E8%25BF%2590%25E8%25A1%258C-java-%25E5%25BA%2594%25E7%2594%25A8%25E7%25A8%258B%25E5%25BA%258F%25E7%259A%2584%25E6%259A%2582%25E5%2581%259C%25E9%2597%25AE%25E9%25A2%2598%2f&amp;title=%5b%e8%af%91%5d%e8%ae%a8%e8%ae%ba%e5%9c%a8%20Linux%20Control%20Groups%20%e4%b8%ad%e8%bf%90%e8%a1%8c%20Java%20%e5%ba%94%e7%94%a8%e7%a8%8b%e5%ba%8f%e7%9a%84%e6%9a%82%e5%81%9c%e9%97%ae%e9%a2%98" target="_blank" class="share-btn linkedin">
+      <i class="fa fa-linkedin"></i>
+      <p>LinkedIn</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.stumbleupon.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E8%25AE%25A8%25E8%25AE%25BA%25E5%259C%25A8-linux-control-groups-%25E4%25B8%25AD%25E8%25BF%2590%25E8%25A1%258C-java-%25E5%25BA%2594%25E7%2594%25A8%25E7%25A8%258B%25E5%25BA%258F%25E7%259A%2584%25E6%259A%2582%25E5%2581%259C%25E9%2597%25AE%25E9%25A2%2598%2f&amp;title=%5b%e8%af%91%5d%e8%ae%a8%e8%ae%ba%e5%9c%a8%20Linux%20Control%20Groups%20%e4%b8%ad%e8%bf%90%e8%a1%8c%20Java%20%e5%ba%94%e7%94%a8%e7%a8%8b%e5%ba%8f%e7%9a%84%e6%9a%82%e5%81%9c%e9%97%ae%e9%a2%98" target="_blank" class="share-btn stumbleupon">
+    <i class="fa fa-stumbleupon"></i>
+    <p>StumbleUpon</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.pinterest.com/pin/create/button/?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E8%25AE%25A8%25E8%25AE%25BA%25E5%259C%25A8-linux-control-groups-%25E4%25B8%25AD%25E8%25BF%2590%25E8%25A1%258C-java-%25E5%25BA%2594%25E7%2594%25A8%25E7%25A8%258B%25E5%25BA%258F%25E7%259A%2584%25E6%259A%2582%25E5%2581%259C%25E9%2597%25AE%25E9%25A2%2598%2f&amp;description=%5b%e8%af%91%5d%e8%ae%a8%e8%ae%ba%e5%9c%a8%20Linux%20Control%20Groups%20%e4%b8%ad%e8%bf%90%e8%a1%8c%20Java%20%e5%ba%94%e7%94%a8%e7%a8%8b%e5%ba%8f%e7%9a%84%e6%9a%82%e5%81%9c%e9%97%ae%e9%a2%98" target="_blank" class="share-btn pinterest">
+    <i class="fa fa-pinterest-p"></i>
+    <p>Pinterest</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="mailto:?subject=Check out this post by %e6%b6%a4%e7%94%9f&amp;body=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E8%25AE%25A8%25E8%25AE%25BA%25E5%259C%25A8-linux-control-groups-%25E4%25B8%25AD%25E8%25BF%2590%25E8%25A1%258C-java-%25E5%25BA%2594%25E7%2594%25A8%25E7%25A8%258B%25E5%25BA%258F%25E7%259A%2584%25E6%259A%2582%25E5%2581%259C%25E9%2597%25AE%25E9%25A2%2598%2f" target="_blank" class="share-btn email">
+    <i class="fa fa-envelope"></i>
+    <p>Email</p>
+  </a>
+</li>
+
+
+        </ul>
+    </section>
+</section>
+
+    
+    <div id="main">
+        
+        
+        <article class="post">
+  <header>
+    <div class="title">
+        
+            <h1><a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a></h1>
+            
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2019-05-09'>
+            2019-05-09</time>
+        <span class="author">涤生</span>
+        
+            <p>5 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+
+  
+
+  
+
+  <div id="content">
+    
+
+<h2 id="说明">说明</h2>
+
+<p>本篇原文来自 LinkedIn 的 Zhenyun Zhuang，原文：<a href="https://engineering.linkedin.com/blog/2016/11/application-pauses-when-running-jvm-inside-linux-control-groups">Application Pauses When Running JVM Inside Linux Control Groups</a>[1]，在容器化的进程中，或多或少会对现有应用程序带来一些问题，这篇文章讲的是 LinkedIn 在使用 cgroups 构建容器化产品过程中，发现资源限制策略对 Java 应用程序性能会产生一些影响，文章深入分析问题根本原因，并给出解决方案。笔者看过后，觉得非常赞，因此翻译后献给大家，希望对大家有帮助。</p>
+
+<h2 id="前言">前言</h2>
+
+<p>基于 Linux <a href="https://en.wikipedia.org/wiki/Cgroups">cgroups</a>[2]的解决方案（例如，<a href="https://en.wikipedia.org/wiki/Docker_%28software%29">Docker</a>[3]，<a href="https://en.wikipedia.org/wiki/CoreOS">CoreOS</a>[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的<a href="https://engineering.linkedin.com/blog/2016/05/rain--better-resource-allocation-through-containerization">容器化</a>[5]产品 <a href="https://engineering.linkedin.com/blog/2016/04/faster-and-easier-service-deployment-with-lps--our-new-private-c">LPS</a>[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 <a href="https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt">CFS</a>[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。
+这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况：
+1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。</p>
+
+<ol>
+<li>多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。</li>
+</ol>
+
+<p>在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言：
+1. 应该将足够的 CPU 配额分配给承载 Java 应用程序的 CGROUP；
+2. 应该适当地调低 JVM GC 线程，以缓解暂停。</p>
+
+<h2 id="linux-cgroups-背景">Linux cgroups 背景</h2>
+
+<p>Linux cgroups（控制组）用于限制应用程序的各种类型资源的使用。对于 CPU 资源，CPU 子系统调度 CPU 的 cgroup 任务访问，CFS 是两个受支持的调度程序之一。 CFS 是一个比例共享调度程序，它根据 cgroup 的权重为 cgroup 分配 CPU 访问权限。
+对于我们使用的 <a href="https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/resource_management_guide/sec-cpu">RHEL7</a>[8]（Red Hat Enterprise Linux）机器，有多个可调参数。用于限制 CPU 执行的有两个 CFS 参数，这两个参数可以用于限制 cgroup 使用的 CPU 资源：cpu.cfs_period_us 和 cpu.cfs_quota_us，均以微秒为单位。 cpu.cfs_period_us 指定应用配额的 CFS 周期或强制执行间隔，cpu.cfs_quota_us指定 cgroup 在每个 CFS 周期中可以使用的配额。 cpu.cfs_quota_us 实质上设置了 CPU 资源的硬限制（即上限）。 cgroup（及其进程）仅允许在 cpu.cfs_quota_us 中指定的持续时间内占用 CPU 核心资源。因此，为了给出 cgroup N 核，cpu.cfs_quota_us 设置为 cpu.cfs_period_us 的 N 倍。</p>
+
+<h2 id="工作负载和配置情况">工作负载和配置情况</h2>
+
+<p>为了进行分析，我们创建了一个用于测试 CFS 行为的 Java 应用程序。这个 Java 应用程序简单地在 Java 堆上分配对象。当分配的对象数量达到某个阈值后，将释放其中的一部分。有两个应用程序线程，每个线程独立地执行对象分配和对象释放。每个对象分配所花费的时间记录为分配延迟。这个测试 Java 应用程序的源代码位于 <a href="https://github.com/zhenyun/cgroupsGC">GitHub</a>[9] 上。
+我们考虑的性能指标包括：
+（1）应用程序吞吐量（对象分配率）;
+（2）对象分配延迟;
+（3）cgroup 的统计信息，包括 cgroup 的 CPU 使用率，nr_throttled（受限制的 CFS 周期数）和 throttled_time（总限制时间）。
+我们使用的机器是 RHEL7，内核为 3.10.0-327，它有 24 个 HT（超线程）内核。使用 CFS 上限强制限制 CPU 资源。默认情况下，托管 Java 应用程序的 cgroup 被分配了三个 CPU 共享核心，考虑到有两个应用程序线程和 GC 活动。在以后的测试中，我们还改变了分配的核心数量，以获得更多的信息。默认情况下，cfs_period 为 100 毫秒。每次运行工作需要 20 分钟（1200 秒）。因此，当 cfs_period 为 100ms 时，每次运行中有 12,000 个 CFS 周期。</p>
+
+<h2 id="排查应用长时间暂停">排查应用长时间暂停</h2>
+
+<p>我们将从对特定应用程序暂停的详细分析开始，以便了解暂停背后的原因。</p>
+
+<h3 id="应用暂停">应用暂停</h3>
+
+<p>在 22:57:34 时，两个应用程序线程都停止大约三秒钟（即 2,917 毫秒和 2,916 毫秒）。</p>
+
+<pre><code>// Thread id, time stamp, application freezing time (ms)
+Thread 1: 2016-10-07 22:57:34.00974,2917
+Thread 2: 2016-10-07 22:57:34.00975,2916
+</code></pre>
+
+<h3 id="jvm-gc-stw">JVM GC STW</h3>
+
+<p>为了理解导致三秒钟应用程序冻结的原因，我们首先检查了 JVM GC 日志。我们发现在 22：57：37.771 时，STW（停止世界）GC 暂停发生。请注意，暂停持续约 0.12 秒。</p>
+
+<pre><code>2016-10-07T22:57:33.985+0000: 30.856: [GC concurrent-root-region-scan-start]
+2016-10-07T22:57:33.991+0000: 30.863: [GC concurrent-root-region-scan-end, 0.0064502 secs]
+2016-10-07T22:57:33.991+0000: 30.863: [GC concurrent-mark-start]
+2016-10-07T22:57:37.771+0000: 34.642: [GC pause (G1 Evacuation Pause) (young), 0.1194989 secs]
+  [Parallel Time: 118.0 ms, GC Workers: 18]
+     [GC Worker Start (ms): Min: 34642.7, Avg: 34642.9, Max: 34643.1, Diff: 0.4]
+     [Ext Root Scanning (ms): Min: 0.0, Avg: 0.1, Max: 0.3, Diff: 0.3, Sum: 1.3]
+     [SATB Filtering (ms): Min: 0.0, Avg: 0.0, Max: 0.0, Diff: 0.0, Sum: 0.0]
+     [Update RS (ms): Min: 8.5, Avg: 10.8, Max: 13.7, Diff: 5.2, Sum: 194.8]
+        [Processed Buffers: Min: 3, Avg: 3.6, Max: 4, Diff: 1, Sum: 65]
+     [Scan RS (ms): Min: 0.0, Avg: 1.3, Max: 4.0, Diff: 4.0, Sum: 23.2]
+     [Code Root Scanning (ms): Min: 0.0, Avg: 0.0, Max: 0.0, Diff: 0.0, Sum: 0.0]
+     [Object Copy (ms): Min: 103.8, Avg: 105.4, Max: 105.9, Diff: 2.2, Sum: 1896.6]
+     [Termination (ms): Min: 0.0, Avg: 0.0, Max: 0.0, Diff: 0.0, Sum: 0.5]
+     [GC Worker Other (ms): Min: 0.0, Avg: 0.0, Max: 0.1, Diff: 0.1, Sum: 0.6]
+     [GC Worker Total (ms): Min: 117.4, Avg: 117.6, Max: 117.9, Diff: 0.4, Sum: 2117.1]
+     [GC Worker End (ms): Min: 34760.5, Avg: 34760.6, Max: 34760.6, Diff: 0.1]
+  [Code Root Fixup: 0.0 ms]
+  [Code Root Purge: 0.0 ms]
+  [Clear CT: 0.5 ms]
+  [Other: 1.0 ms]
+     [Choose CSet: 0.0 ms]
+     [Ref Proc: 0.2 ms]
+     [Ref Enq: 0.0 ms]
+     [Redirty Cards: 0.2 ms]
+     [Humongous Reclaim: 0.0 ms]
+     [Free CSet: 0.1 ms]
+  [Eden: 1120.0M(1120.0M)-&gt;0.0B(1120.0M) Survivors: 160.0M-&gt;160.0M Heap: 16.6G(25.0G)-&gt;15.9G(25.0G)]
+[Times: user=1.27 sys=0.09, real=0.12 secs]
+2016-10-07T22:57:37.891+0000: 34.762: Total time for which application threads were stopped: 0.1197007 seconds, Stopping threads took: 0.0000314 seconds
+</code></pre>
+
+<p>与 3 秒钟的应用停止相比，0.12 秒的 GC 暂停不足以解释 2.88 秒（即 3 - 0.12）的时间差距；因此，暂停必然有其他原因。</p>
+
+<h3 id="cfs-限制">CFS 限制</h3>
+
+<p>我们怀疑应用程序除了 GC 外的暂停是由 cgroups 的 CFS 调度程序引起的。我们通过收集应用程序运行的每一秒的各种类型的报告 cgroups 统计信息来检查 cgroups 的统计信息。我们发现“throttled_time”的指标很有意义。 “throttled_time”报告该组实体已被限制的累计总持续时间（以纳秒为单位）。</p>
+
+<p>我们注意到，当应用程序被冻结时，“throttled_time”发生在 22:57:33。当应用程序处于冻结期时，“throttled_time”的增加（即差异）约为 5.28 秒。因此，我们认为“throttled_time”导致应用冻结。</p>
+
+<pre><code>// time stamp, throttled_time in ns, delta in seconds (difference from last report)
+2016-10-07 22:57:32.01789       throttled_time 72284616704759  // 
+2016-10-07 22:57:33.02097       throttled_time 72288113805728  // delta = 3.497 seconds
+2016-10-07 22:57:34.02403       throttled_time 72288643653704  // delta = 0.529 seconds
+2016-10-07 22:57:35.02707       throttled_time 72289899729523 // delta = 1.256 seconds
+2016-10-07 22:57:36.03015       throttled_time 72289899729523 // delta = 0 seconds
+2016-10-07 22:57:37.03311       throttled_time 72289899729523  // delta = 0 seconds
+</code></pre>
+
+<h3 id="jvm-gc-线程">JVM GC 线程</h3>
+
+<p>我们发现一些 CFS 调度周期暴露了大量的“throttled_time”，我们认为这是由（多个）JVM GC 线程引起的。简而言之，当 GC 启动时，JVM 会调用多个 GC 线程来完成工作。 JVM 使用内部公式来决定 GC 线程的数量。具体来说，对于具有 24 个内核的计算机，并行 GC 线程的数量为 18，并发 GC 线程的数量为 5。由于这些大量线程，cgroup 的 CPU 配额很快用完，导致所有应用程序线程（包括 GC 线程）暂停。</p>
+
+<pre><code>// Flag: -XX:+PrintFlagsFinal 
+// The machine has 24 cpu cores
+// GC output
+    uintx ParallelGCThreads                         = 18                                  {product}
+    uintx ConcGCThreads                            := 5     
+</code></pre>
+
+<h3 id="cfs-调度程序如何导致应用程序暂停">CFS 调度程序如何导致应用程序暂停？</h3>
+
+<p>CFS 调度程序可能导致应用程序长时间的暂停。有些情况下，cgroup（以及在cgroup 中运行的应用程序）受到限制，导致应用程序暂停很长时间。虽然“GC 线程更快速地使用 CFS 配额（cpu.cfs_quota_us）”的简要回答很容易给出，但我们想更全面地了解这个问题，以便提出解决方案。</p>
+
+<p>关于使用 CFS 调度程序时应用程序暂停有三种问题场景，我们将逐一解释。为了更好地说明问题，我们使用具体配置的示例（例如，cfs_period 和 cfs_quota）。</p>
+
+<h4 id="理想场景-预期场景">理想场景（预期场景）</h4>
+
+<p>假设 cfs_period 为 300ms，cgroup（仅含有单个应用程序）的 cfs_quota 为 90ms。我们还假设应用程序只有一个活动线程来简化表示。</p>
+
+<p>理想情况下，CPU 调度程序会调度应用程序在每个 CFS 周期内稀疏运行，以便应用程序不会长时间暂停。如下图所示，应用程序计划在 300ms CFS 期间运行  3 次。计划运行之间存在应用程序暂停，预期的应用程序暂停时间为 70 毫秒（假设应用程序完全使用 90 毫秒 CPU 配额）。
+<img src="https://upload-images.jianshu.io/upload_images/3017145-30a5a47a6a46946a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="理想场景" /></p>
+
+<h4 id="java-和非-java-应用程序的问题场景">Java 和非 Java 应用程序的问题场景</h4>
+
+<p>第一个问题发生在应用程序耗尽 90ms 的所有 CPU 配额时，例如在某些 CFS 时段的前 90ms 内。然后，由于配额被占用，在剩余的 210ms 期间，应用程序暂停，用户经历 210ms 延迟。请注意，多线程应用程序的问题更严重，因为 CPU 配额可以更快地用完。
+<img src="https://upload-images.jianshu.io/upload_images/3017145-5bb44abc9fef9b1f.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="Java 和非 Java 应用程序的问题场景" /></p>
+
+<h4 id="java-应用程序的问题场景-gc-期间的-stw-阶段">Java 应用程序的问题场景（GC 期间的 STW 阶段）</h4>
+
+<p>在 STW（stop the world）GC 暂停期间，Java 应用程序更严重，因为 JVM 可以使用多个 GC 线程并行收集垃圾。</p>
+
+<p>假设在某些 CFS 期间，在应用程序运行 30ms 后，需要完成 STW GC。我们假设 GC 工作需要 60ms 的 CPU，而 JVM 有 4 个 GC 线程。然后在 45ms 内，可以完全消耗 90ms 的整个 CPU 配额（即，在“运行”期间的 CPU 时间是（60ms “GC”/ 4个线程 = 15ms）GC 实际时间 + 30ms 应用运行）。剩余的 255ms 将是应用程序暂停时间。</p>
+
+<p>显然，使用更多 GC 线程，可以更快地耗尽 CPU 配额。请注意，在现代计算机上，GC 线程的数量可能会大得多，因为在 cgroup 中运行的每个 JVM 仍会根据整个物理主机的 CPU 核心数设置其 GC 并行化级别。例如，在 12 核机器上，默认情况下 JVM 使用 9 个 GC 线程。 24 核机器将使JVM使用 18 个 GC 线程。
+<img src="https://upload-images.jianshu.io/upload_images/3017145-4d311eb681fe0c05.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="Java 应用程序的问题场景（GC 期间的 STW 阶段）" /></p>
+
+<h4 id="java-应用程序的问题场景-gc-期间的并发阶段">Java 应用程序的问题场景（GC 期间的并发阶段）</h4>
+
+<p>对于流行的 JVM 垃圾收集器，如 CMS 和 G1，GC 有多个阶段；某些阶段是 STW，其他阶段是并发（非 STW）。虽然并发 GC 阶段（使用并发 GC 线程）旨在避免 JVM STW，但 cgroup 的使用完全违背了目的。在并发 GC 阶段，使用的 CPU 时间也会影响 cgroup 的 CPU 使用率，这实际上会导致应用程序遇到更大的“STW”暂停。
+<img src="https://upload-images.jianshu.io/upload_images/3017145-9acc73e188792806.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="Java 应用程序的问题场景（GC 期间的并发阶段）" /></p>
+
+<h2 id="建议">建议</h2>
+
+<p>我们已经看到，由于 JVM GC 和 CFS 调度之间的交互，在 Linux cgroup 中运行的 Java 应用程序可能会遇到更长的应用程序暂停。为缓解此问题，我们建议您使用以下调整：
+1. 充分配置 CPU 资源（即 CFS 配额）。显然，分配给 cgroup 的 CPU 配额越大，cgroup 被限制的可能性就越小。
+2. 适当调整 GC 线程。</p>
+
+<h3 id="充分配置-cpu-资源">充分配置 CPU 资源</h3>
+
+<p>对于我们使用的只有 2 个活动应用程序线程的工作负载，似乎 2 个 CPU 核心可以满足 CPU 需求。但是，我们发现由于 GC 活动，应用程序受益于更大的 CPU 配额（即，更多的 CPU 核心）。</p>
+
+<h4 id="应用程序性能-吞吐量和延迟">应用程序性能（吞吐量和延迟）</h4>
+
+<p>为了了解特定 JVM 工作负载需要多少 CPU 核心，我们改变了分配给每个主机 cgroup 的 CPU 份额（以 CPU 核心为单位，其中配额的 CPU 核心等于 CFS 周期的单位）。我们发现，分配了更多内核后，应用程序吞吐量不断增加，直到大约 12 个内核。与 2 个应用程序线程相比，这种差异（即 12 对 2）显示了将CPU 份额充分提供给 Java 应用程序的重要性。</p>
+
+<p>我们还计算了大的分配延迟（即超过 50 毫秒）的数量，并发现随着更多内核，大延迟的数量持续下降，直到大约 8 个内核。
+<img src="https://upload-images.jianshu.io/upload_images/3017145-0c84a8f2f2e162ac.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="应用程序性能（吞吐量和延迟）" /></p>
+
+<h4 id="cgroup-的-cpu-使用率">Cgroup 的 CPU 使用率</h4>
+
+<p>cgroup 的 CPU 使用率（用户时间和系统时间）也随着分配的内核数量的增加而增加，如下图所示。请注意，值是来自所有核心的聚合值。运行时间为 1,200 秒，CPU 使用率为 6,000 秒表示整体 5 核 CPU 使用率。</p>
+
+<p>这些结果表明，对于具有 2 个活动应用程序线程的此特定 Java 应用程序，需要将更多内核分配给主机 cgroup。
+<img src="https://upload-images.jianshu.io/upload_images/3017145-bab66f9da9b79838.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="Cgroup 的 CPU 使用率" /></p>
+
+<h2 id="调整-gc-线程-parallelgcthreads">调整 GC 线程（ParallelGCThreads）</h2>
+
+<p>我们还将 ParallelGCThreads 从 1 改为 24，以了解性能影响。请注意，是通过 JVM 参数来调整 ParallelGCThreads，ConcGCThreads 的值。</p>
+
+<p>更多 GC 线程倾向于更快地耗尽 CFS 配额，如 Cgroup 性能（受限制的 CFS 周期数和受限制时间）所示。结果，观察到更大的延迟。应用程序吞吐量没有太大变化，但对于此特定工作负载，它实际上会下降。</p>
+
+<p>这些结果表明调低 GC 线程可能有利于应用程序性能。但是，应用程序在许多方面有所不同（例如，GC 频率，堆大小，应用程序线程的特征），因此需要针对每个应用程序评估这些调整的影响。由于空间问题和进一步调查的复杂性，我们不会深入研究这方面。</p>
+
+<h3 id="cgroup-性能-受限制的-cfs-周期数和受限制时间">Cgroup 性能（受限制的 CFS 周期数和受限制时间）</h3>
+
+<p><img src="https://upload-images.jianshu.io/upload_images/3017145-2824e6ba88771b06.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="Cgroup 性能（受限制的 CFS 周期数和受限制时间）" /></p>
+
+<h3 id="应用程序性能-延迟和吞吐量">应用程序性能（延迟和吞吐量）</h3>
+
+<p><img src="https://upload-images.jianshu.io/upload_images/3017145-3887f1c87e49b4dc.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="应用程序性能（延迟和吞吐量）" /></p>
+
+<h3 id="讨论">讨论</h3>
+
+<h4 id="cfs-上限限制或相对共享">CFS 上限限制或相对共享</h4>
+
+<p>CFS 调度支持上限限制（即硬限制）和相对共享。 CFS 相对共享使用cpu.shares 可调参数来控制 cgroups 可以使用的 CPU 资源的权重。虽然它允许 cgroup 使用其他空闲的 CPU 资源，但由于依赖于其他 cgroup，相对共享具有性能可预测性差的限制。应用程序将根据 CPU 内核的可用性看到不同的性能，这使得容量规划和性能监视难以实现。</p>
+
+<p>在只有一个 cgroup 主动使用 CPU 的机器上，相对共享允许“忙” cgroup “窃取” CPU 资源超出其逻辑份额（由其 cpu.shares 部分表示），因此 JVM GC 的影响不太明显。然而，当机器满负载（即，所有 CPU 核心都忙），相对共享的有效性与上限强制执行相当，因为每个 cgroup 仅被允许消耗相应的 CPU 资源部分。因此，由多线程 JVM GC 引起的性能问题 - 以及严重的应用程序暂停 - 将显示出来。</p>
+
+<h4 id="调整-gc-线程依赖工作负载">调整 GC 线程依赖工作负载</h4>
+
+<p>减少 GC 线程的数量有助于降低 CFS 共享过早耗尽的可能性，从而有助于减少由 CFS 限制导致的长应用程序暂停。但是，较少的 GC 线程也可能导致更长的 GC STW 暂停，因为 GC 工作需要更多时间才能完成。因此，需要在这两个问题之间进行权衡，并且适当数量的 GC 线程取决于工作负载特征和延迟 SLA（服务级别协议），因此应谨慎选择。</p>
+
+<h2 id="结论">结论</h2>
+
+<p>在 Linux cgroup 中运行 Java 应用程序需要彻底了解 JVM GC 如何与 cgroup 的 CPU 调度交互。我们发现由于密集的 GC 活动，应用程序可能会遇到更长的暂停。为确保满意的应用程序性能，必须配置足够的 CPU 配额，并且根据情况，应调整 GC 线程。</p>
+
+<h2 id="参考文献">参考文献</h2>
+
+<p>[1] Application Pauses When Running JVM Inside Linux Control Groups：<a href="https://engineering.linkedin.com/blog/2016/11/application-pauses-when-running-jvm-inside-linux-control-groups">https://engineering.linkedin.com/blog/2016/11/application-pauses-when-running-jvm-inside-linux-control-groups</a>
+[2] Cgroup：<a href="https://en.wikipedia.org/wiki/Cgroups">https://en.wikipedia.org/wiki/Cgroups</a>
+[3] Docker：<a href="https://en.wikipedia.org/wiki/Docker_%28software%29">https://en.wikipedia.org/wiki/Docker_%28software%29</a>
+[4] CoreOS：<a href="https://en.wikipedia.org/wiki/CoreOS">https://en.wikipedia.org/wiki/CoreOS</a>
+[5] 容器化：<a href="https://engineering.linkedin.com/blog/2016/05/rain--better-resource-allocation-through-containerization">https://engineering.linkedin.com/blog/2016/05/rain--better-resource-allocation-through-containerization</a>
+[6] LPS：<a href="https://engineering.linkedin.com/blog/2016/04/faster-and-easier-service-deployment-with-lps--our-new-private-c">https://engineering.linkedin.com/blog/2016/04/faster-and-easier-service-deployment-with-lps--our-new-private-c</a>
+[7] CFS：<a href="https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt">https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt</a>
+[8] RHEL7：<a href="https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/resource_management_guide/sec-cpu">https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/6/html/resource_management_guide/sec-cpu</a>
+[9] 测试程序 GitHub 地址：<a href="https://github.com/zhenyun/cgroupsGC">https://github.com/zhenyun/cgroupsGC</a></p>
+
+<hr />
+
+<p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+
+<p><img src="https://upload-images.jianshu.io/upload_images/3017145-277e5f278eb59205.jpg?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240" alt="涤生-微信公共号" /></p>
+
+  </div>
+
+  <footer>
+    <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/cgroup">Cgroup</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/stw">STW</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+
+</article>
+
+<ul class="actions pagination">
+    
+        <li><a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/"
+                class="button big previous">[译]高吞吐低延迟 Java 应用的 GC 优化</a></li>
+    
+
+    
+        <li><a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/"
+                class="button big next">Zookeeper 集群高可用部署详解</a></li>
+    
+</ul>
+
+
+    </div>
+    
+<section id="sidebar">
+
+  
+  <section id="intro">
+    
+    
+      
+        <a href='https://andyyin.github.io/'><img src="https://andyyin.github.io/img/main/disheng.jpg" class="intro-circle" width="100" alt="涤生的博客" /></a>
+      
+    
+    
+      <header>
+        <h2>涤生的博客</h2>
+        <p>主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      </header>
+    
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+  </section>
+
+  
+  <section class="recent-posts">
+    <div class="mini-posts">
+      <header>
+        <h3>最新文章</h3>
+      </header>
+      <div class="posts-container">
+        
+
+        
+          
+        
+
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-19'>
+                2019-05-19
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-09'>
+                2019-05-09
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-21'>
+                2019-04-21
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-15'>
+                2019-04-15
+              </time>
+            </header>
+            
+
+          </article>
+        
+      </div>
+
+      
+        <a href=
+          
+            /blog/
+          
+        class="button">View more posts</a>
+      
+    </div>
+  </section>
+
+  
+  
+  
+  
+  
+    <section id="categories">
+      <header>
+        <h3>
+          <a href="https://andyyin.github.io/categories/">分类</a>
+        </h3>
+      </header>
+        
+          
+        
+
+        
+        <p>
+          <article>
+            <header>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">2</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">2</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/zookeeper/">Zookeeper</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+    </section>
+  
+  
+
+  
+  
+    <section id="mini-bio">
+      <h3>关于我</h3>
+      <p>涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      <a href="https://andyyin.github.io/about/" class="button">了解更多</a>
+    </section>
+  
+
+  
+  <section id="footer">
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+    <p class="copyright">
+      
+        &copy; 2019
+        
+          涤生的博客
+        
+      .
+      Powered by <a href="https://andyyin.github.io/" target="_blank">涤生</a>
+    </p>
+  </section>
+</section>
+
+    </div>
+    <a id="back-to-top" href="#" class="fa fa-arrow-up fa-border fa-2x"></a>
+    
+
+    
+      
+    
+
+    
+      
+      
+      
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/highlight.min.js"></script>
+        
+        
+        
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/r.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/yaml.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/css.min.js"></script>
+        <script>hljs.configure({languages: []}); hljs.initHighlightingOnLoad();</script>
+      
+    
+    
+    
+      <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/skel/3.0.1/skel.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.js"></script>
+      <script src="https://andyyin.github.io/js/util.js"></script>
+      <script src="https://andyyin.github.io/js/main.js"></script>
+      <script src="https://andyyin.github.io/js/backToTop.js"></script>
+    
+
+    
+      
+        
+      
+    
+
+    
+    <script>hljs.initHighlightingOnLoad();</script>
+      <script src="//yihui.name/js/math-code.js"></script>
+<script async
+src="//cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+  </body>
+</html>
+

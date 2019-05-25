@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>STW on 涤生的博客</title>
+    <link>https://andyyin.github.io/tags/stw/</link>
+    <description>Recent content in STW on 涤生的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh</language>
+    <lastBuildDate>Thu, 09 May 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://andyyin.github.io/tags/stw/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</title>
+      <link>https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/</link>
+      <pubDate>Thu, 09 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/</guid>
+      <description>说明 本篇原文来自 LinkedIn 的 Zhenyun Zhuang，原文：Application Pauses When Running JVM Inside Linux Control Groups[1]，在容器化的进程中，或多或少会对现有应用程序带来一些问题，这篇文章讲的是 LinkedIn 在使用 cgroups 构建容器化产品过程中，发现资源限制策略对 Java 应用程序性能会产生一些影响，文章深入分析问题根本原因，并给出解决方案。笔者看过后，觉得非常赞，因此翻译后献给大家，希望对大家有帮助。
+前言 基于 Linux cgroups[2]的解决方案（例如，Docker[3]，CoreOS[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的容器化[5]产品 LPS[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 CFS[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。 这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况： 1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。
+ 多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。  在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言： 1.</description>
+    </item>
+    
+  </channel>
+</rss>

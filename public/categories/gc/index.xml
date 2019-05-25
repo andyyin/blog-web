@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>GC on 涤生的博客</title>
+    <link>https://andyyin.github.io/categories/gc/</link>
+    <description>Recent content in GC on 涤生的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh</language>
+    <lastBuildDate>Thu, 09 May 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://andyyin.github.io/categories/gc/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</title>
+      <link>https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/</link>
+      <pubDate>Thu, 09 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/</guid>
+      <description>说明 本篇原文来自 LinkedIn 的 Zhenyun Zhuang，原文：Application Pauses When Running JVM Inside Linux Control Groups[1]，在容器化的进程中，或多或少会对现有应用程序带来一些问题，这篇文章讲的是 LinkedIn 在使用 cgroups 构建容器化产品过程中，发现资源限制策略对 Java 应用程序性能会产生一些影响，文章深入分析问题根本原因，并给出解决方案。笔者看过后，觉得非常赞，因此翻译后献给大家，希望对大家有帮助。
+前言 基于 Linux cgroups[2]的解决方案（例如，Docker[3]，CoreOS[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的容器化[5]产品 LPS[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 CFS[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。 这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况： 1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。
+ 多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。  在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言： 1.</description>
+    </item>
+    
+    <item>
+      <title>[译]高吞吐低延迟 Java 应用的 GC 优化</title>
+      <link>https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/</link>
+      <pubDate>Sun, 21 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/</guid>
+      <description>说明 本篇原文作者是 LinkedIn 的 Swapnil Ghike，这篇文章讲述了 LinkedIn 的 Feed 产品的 GC 优化过程，虽然文章写作于 April 8, 2014，但其中的很多内容和知识点非常有参考意义。因此，翻译后献给各位同学。 原文链接：Garbage Collection Optimization for High-Throughput and Low-Latency Java Applications。
+背景 高性能应用构成了现代网络的支柱。LinkedIn 内部有许多高吞吐量服务来满足每秒成千上万的用户请求。为了获得最佳的用户体验，以低延迟响应这些请求是非常重要的。
+例如，我们的用户经常使用的产品是 Feed —— 它是一个不断更新的专业活动和内容的列表。Feed 在 LinkedIn 的系统中随处可见，包括公司页面、学校页面以及最重要的主页资讯信息。基础 Feed 数据平台为我们的经济图谱（会员、公司、群组等）中各种实体的更新建立索引，它必须高吞吐低延迟地实现相关的更新。 为了将这些高吞吐量、低延迟类型的 Java 应用程序用于生产，开发人员必须确保在应用程序开发周期的每个阶段都保持一致的性能。确定最佳垃圾收集（Garbage Collection, GC）配置对于实现这些指标至关重要。
+这篇博文将通过一系列步骤来明确需求并优化 GC，它的目标读者是对使用系统方法进行 GC 优化来实现应用的高吞吐低延迟目标感兴趣的开发人员。在 LinkedIn 构建下一代 Feed 数据平台的过程中，我们总结了该方法。这些方法包括但不限于以下几点：并发标记清除（Concurrent Mark Sweep，CMS） 和 G1 垃圾回收器的 CPU 和内存开销、避免长期存活对象导致的持续 GC、优化 GC 线程任务分配提升性能，以及可预测 GC 停顿时间所需的 OS 配置。
+优化 GC 的正确时机？ GC 的行为可能会因代码优化以及工作负载的变化而变化。因此，在一个已实施性能优化的接近完成的代码库上进行 GC 优化非常重要。而且在端到端的基本原型上进行初步分析也很有必要，该原型系统使用存根代码并模拟了可代表生产环境的工作负载。这样可以获取该架构延迟和吞吐量的真实边界，进而决定是否进行纵向或横向扩展。</description>
+    </item>
+    
+  </channel>
+</rss>

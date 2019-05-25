@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Tags on 涤生的博客</title>
+    <link>https://andyyin.github.io/tags/</link>
+    <description>Recent content in Tags on 涤生的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh</language>
+    <lastBuildDate>Sun, 21 Apr 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://andyyin.github.io/tags/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>CMS</title>
+      <link>https://andyyin.github.io/tags/cms/</link>
+      <pubDate>Sun, 21 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/cms/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Cgroup</title>
+      <link>https://andyyin.github.io/tags/cgroup/</link>
+      <pubDate>Thu, 09 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/cgroup/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>GC</title>
+      <link>https://andyyin.github.io/tags/gc/</link>
+      <pubDate>Thu, 09 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/gc/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Java</title>
+      <link>https://andyyin.github.io/tags/java/</link>
+      <pubDate>Thu, 09 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/java/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>STW</title>
+      <link>https://andyyin.github.io/tags/stw/</link>
+      <pubDate>Thu, 09 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/stw/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>Zookeeper</title>
+      <link>https://andyyin.github.io/tags/zookeeper/</link>
+      <pubDate>Sun, 19 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/zookeeper/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>低延时</title>
+      <link>https://andyyin.github.io/tags/%E4%BD%8E%E5%BB%B6%E6%97%B6/</link>
+      <pubDate>Sun, 21 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/%E4%BD%8E%E5%BB%B6%E6%97%B6/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>团队</title>
+      <link>https://andyyin.github.io/tags/%E5%9B%A2%E9%98%9F/</link>
+      <pubDate>Mon, 15 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/%E5%9B%A2%E9%98%9F/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>意识</title>
+      <link>https://andyyin.github.io/tags/%E6%84%8F%E8%AF%86/</link>
+      <pubDate>Mon, 15 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/%E6%84%8F%E8%AF%86/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>时间</title>
+      <link>https://andyyin.github.io/tags/%E6%97%B6%E9%97%B4/</link>
+      <pubDate>Mon, 15 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/%E6%97%B6%E9%97%B4/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>沟通</title>
+      <link>https://andyyin.github.io/tags/%E6%B2%9F%E9%80%9A/</link>
+      <pubDate>Mon, 15 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/%E6%B2%9F%E9%80%9A/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>进取</title>
+      <link>https://andyyin.github.io/tags/%E8%BF%9B%E5%8F%96/</link>
+      <pubDate>Mon, 15 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/%E8%BF%9B%E5%8F%96/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>部署</title>
+      <link>https://andyyin.github.io/tags/%E9%83%A8%E7%BD%B2/</link>
+      <pubDate>Sun, 19 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/%E9%83%A8%E7%BD%B2/</guid>
+      <description></description>
+    </item>
+    
+    <item>
+      <title>高可用</title>
+      <link>https://andyyin.github.io/tags/%E9%AB%98%E5%8F%AF%E7%94%A8/</link>
+      <pubDate>Sun, 19 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/tags/%E9%AB%98%E5%8F%AF%E7%94%A8/</guid>
+      <description></description>
+    </item>
+    
+  </channel>
+</rss>

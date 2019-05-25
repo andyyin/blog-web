@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Blogs on 涤生的博客</title>
+    <link>https://andyyin.github.io/blog/</link>
+    <description>Recent content in Blogs on 涤生的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh</language>
+    <lastBuildDate>Sun, 19 May 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://andyyin.github.io/blog/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>Zookeeper 集群高可用部署详解</title>
+      <link>https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/</link>
+      <pubDate>Sun, 19 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/</guid>
+      <description>介绍 Zookeeper 我想大家都不陌生，在很多场合都听到它的名字。它是 Apache 的一个顶级项目，为分布式应用提供一致性高性能协调服务。可以用来做：配置维护、域名服务、分布式锁等。有很多开源组件，尤其是中间件领域，使用 Zookeeper 作为配置中心或者注册中心。例如，它是 Hadoop 和 HBase 的重要组件，是 Kafka 的管理和协调服务，是 Dubbo 等服务框架的注册中心等。
+本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
+原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
+架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色： * Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; * Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; * Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
+Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+ 基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N+1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。</description>
+    </item>
+    
+    <item>
+      <title>[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</title>
+      <link>https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/</link>
+      <pubDate>Thu, 09 May 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/</guid>
+      <description>说明 本篇原文来自 LinkedIn 的 Zhenyun Zhuang，原文：Application Pauses When Running JVM Inside Linux Control Groups[1]，在容器化的进程中，或多或少会对现有应用程序带来一些问题，这篇文章讲的是 LinkedIn 在使用 cgroups 构建容器化产品过程中，发现资源限制策略对 Java 应用程序性能会产生一些影响，文章深入分析问题根本原因，并给出解决方案。笔者看过后，觉得非常赞，因此翻译后献给大家，希望对大家有帮助。
+前言 基于 Linux cgroups[2]的解决方案（例如，Docker[3]，CoreOS[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的容器化[5]产品 LPS[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 CFS[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。 这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况： 1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。
+ 多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。  在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言： 1.</description>
+    </item>
+    
+    <item>
+      <title>[译]高吞吐低延迟 Java 应用的 GC 优化</title>
+      <link>https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/</link>
+      <pubDate>Sun, 21 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/</guid>
+      <description>说明 本篇原文作者是 LinkedIn 的 Swapnil Ghike，这篇文章讲述了 LinkedIn 的 Feed 产品的 GC 优化过程，虽然文章写作于 April 8, 2014，但其中的很多内容和知识点非常有参考意义。因此，翻译后献给各位同学。 原文链接：Garbage Collection Optimization for High-Throughput and Low-Latency Java Applications。
+背景 高性能应用构成了现代网络的支柱。LinkedIn 内部有许多高吞吐量服务来满足每秒成千上万的用户请求。为了获得最佳的用户体验，以低延迟响应这些请求是非常重要的。
+例如，我们的用户经常使用的产品是 Feed —— 它是一个不断更新的专业活动和内容的列表。Feed 在 LinkedIn 的系统中随处可见，包括公司页面、学校页面以及最重要的主页资讯信息。基础 Feed 数据平台为我们的经济图谱（会员、公司、群组等）中各种实体的更新建立索引，它必须高吞吐低延迟地实现相关的更新。 为了将这些高吞吐量、低延迟类型的 Java 应用程序用于生产，开发人员必须确保在应用程序开发周期的每个阶段都保持一致的性能。确定最佳垃圾收集（Garbage Collection, GC）配置对于实现这些指标至关重要。
+这篇博文将通过一系列步骤来明确需求并优化 GC，它的目标读者是对使用系统方法进行 GC 优化来实现应用的高吞吐低延迟目标感兴趣的开发人员。在 LinkedIn 构建下一代 Feed 数据平台的过程中，我们总结了该方法。这些方法包括但不限于以下几点：并发标记清除（Concurrent Mark Sweep，CMS） 和 G1 垃圾回收器的 CPU 和内存开销、避免长期存活对象导致的持续 GC、优化 GC 线程任务分配提升性能，以及可预测 GC 停顿时间所需的 OS 配置。
+优化 GC 的正确时机？ GC 的行为可能会因代码优化以及工作负载的变化而变化。因此，在一个已实施性能优化的接近完成的代码库上进行 GC 优化非常重要。而且在端到端的基本原型上进行初步分析也很有必要，该原型系统使用存根代码并模拟了可代表生产环境的工作负载。这样可以获取该架构延迟和吞吐量的真实边界，进而决定是否进行纵向或横向扩展。</description>
+    </item>
+    
+    <item>
+      <title>技术人该有的六个意识</title>
+      <link>https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/</link>
+      <pubDate>Mon, 15 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/</guid>
+      <description>这篇文章讲的是百度在数年前要求每个入职的工程师必须被灌输的六个职场意识，这六个意识非常有价值，不管对技术 leader 还是职场小白都应该非常有指导意义。 这里分享给大家，与同在职场中奋斗的同学们共同参考。
+内容摘要   质量意识 时间意识 沟通意识 团队意识 求实意识 进取意识   ##1. 质量意识
+###1.1 流程意识 &amp;gt; 1. world class procedure：用流程解决具有共性的、重复性问题，提高效率 &amp;gt; 2. 既有的流程应严格遵守；没有流程的应创建流程
+###1.2 要对自己的工作质量负责，不要期待别人来发现自己的问题
+###1.3 “稳定”压倒一切，线上服务最重要 &amp;gt;1. 用户体验最重要 &amp;gt;2. 工作安排：二八原则 &amp;gt;3. 优先解决线上服务稳定性问题
+###1.4 不要“想当然” &amp;gt;1. 不要默认“没问题”，而是缺省认为“有问题”；“肯定没问题”一定有问题 &amp;gt;2. 反复核实(double check)十分重要 &amp;gt;3. “我以为他们已经开始做，但我也没有跟他们确认一下” —— 导致项目延期 &amp;gt;4. “我以为这个接口是这样定义，但谁想到是那样的” —— 导致程序崩溃 &amp;gt;5. “我以为发出邮件，他肯定就知道了” —— 实际上，他/她根本不在相应的邮件列表中
+##2. 时间意识 ###2.1 目标管理、结果导向 &amp;gt;1. 弹性工作制：上下班时间自由支配 &amp;gt;2. 关键是要按时保质完成工作
+###2.2 只争朝夕，争分夺秒 &amp;gt;1. 激烈的产业竞争环境 &amp;gt;2. 不要拖到最后才开始工作，因为总可能会有意外 &amp;gt;3.</description>
+    </item>
+    
+  </channel>
+</rss>

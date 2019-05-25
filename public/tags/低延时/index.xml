@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>低延时 on 涤生的博客</title>
+    <link>https://andyyin.github.io/tags/%E4%BD%8E%E5%BB%B6%E6%97%B6/</link>
+    <description>Recent content in 低延时 on 涤生的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh</language>
+    <lastBuildDate>Sun, 21 Apr 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://andyyin.github.io/tags/%E4%BD%8E%E5%BB%B6%E6%97%B6/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>[译]高吞吐低延迟 Java 应用的 GC 优化</title>
+      <link>https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/</link>
+      <pubDate>Sun, 21 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/</guid>
+      <description>说明 本篇原文作者是 LinkedIn 的 Swapnil Ghike，这篇文章讲述了 LinkedIn 的 Feed 产品的 GC 优化过程，虽然文章写作于 April 8, 2014，但其中的很多内容和知识点非常有参考意义。因此，翻译后献给各位同学。 原文链接：Garbage Collection Optimization for High-Throughput and Low-Latency Java Applications。
+背景 高性能应用构成了现代网络的支柱。LinkedIn 内部有许多高吞吐量服务来满足每秒成千上万的用户请求。为了获得最佳的用户体验，以低延迟响应这些请求是非常重要的。
+例如，我们的用户经常使用的产品是 Feed —— 它是一个不断更新的专业活动和内容的列表。Feed 在 LinkedIn 的系统中随处可见，包括公司页面、学校页面以及最重要的主页资讯信息。基础 Feed 数据平台为我们的经济图谱（会员、公司、群组等）中各种实体的更新建立索引，它必须高吞吐低延迟地实现相关的更新。 为了将这些高吞吐量、低延迟类型的 Java 应用程序用于生产，开发人员必须确保在应用程序开发周期的每个阶段都保持一致的性能。确定最佳垃圾收集（Garbage Collection, GC）配置对于实现这些指标至关重要。
+这篇博文将通过一系列步骤来明确需求并优化 GC，它的目标读者是对使用系统方法进行 GC 优化来实现应用的高吞吐低延迟目标感兴趣的开发人员。在 LinkedIn 构建下一代 Feed 数据平台的过程中，我们总结了该方法。这些方法包括但不限于以下几点：并发标记清除（Concurrent Mark Sweep，CMS） 和 G1 垃圾回收器的 CPU 和内存开销、避免长期存活对象导致的持续 GC、优化 GC 线程任务分配提升性能，以及可预测 GC 停顿时间所需的 OS 配置。
+优化 GC 的正确时机？ GC 的行为可能会因代码优化以及工作负载的变化而变化。因此，在一个已实施性能优化的接近完成的代码库上进行 GC 优化非常重要。而且在端到端的基本原型上进行初步分析也很有必要，该原型系统使用存根代码并模拟了可代表生产环境的工作负载。这样可以获取该架构延迟和吞吐量的真实边界，进而决定是否进行纵向或横向扩展。</description>
+    </item>
+    
+  </channel>
+</rss>
