@@ -13,10 +13,10 @@ type = "post"
 
 +++
 
-## 前言
+# 前言
 前几天这篇《[一个 JVM 参数引发的频繁 CMS GC](/blog/一个-jvm-参数引发的频繁-cms-gc)》文章发出之后，反应比较激烈，因为这可能与同学们通常 GC 优化经验相悖，通常有很多业务都通过添加 -XX:+CMSScavengeBeforeRemark 参数，来降低 CMS-remark 的时间，进而提升业务的性能以及可用性。
 
-## 背景
+# 背景
 这里给出几位同学比较典型的的想法和建议：
 “同学1”：“-XX:+CMSScavengeBeforeRemark 参数引发的频繁 CMS GC 有失偏颇，其实根本原因是第一次 CMS GC 过程中的 Young GC 发生了 ‘promotion failed’ 导致了 to space 不为空”。
 
@@ -26,15 +26,16 @@ type = "post"
 
 针对这几位同学提到的想法和建议，我又重新思考这个案例，来解答下这些的问题。因此，这篇文章是《[一个 JVM 参数引发的频繁 CMS GC](/blog/一个-jvm-参数引发的频繁-cms-gc)》的进阶版本。
 
-## 主要内容
+# 主要内容
 本文主要讲解：
+
 > 1. 纠正《[一个 JVM 参数引发的频繁 CMS GC](/blog/一个-jvm-参数引发的频繁-cms-gc)》文章中的一个分析错误
 > 2. -XX:+CMSScavengeBeforeRemark 参数到底是不是引起频繁 CMS GC 的原因
 > 3. 什么场景会出现这种问题
 > 4. 有哪些优化策略
 
-## 内容
-### 纠正《[一个 JVM 参数引发的频繁 CMS GC](/blog/一个-jvm-参数引发的频繁-cms-gc)》文章中的一个错误
+# 内容
+## 纠正《[一个 JVM 参数引发的频繁 CMS GC](/blog/一个-jvm-参数引发的频繁-cms-gc)》文章中的一个错误
 这里纠正《[一个 JVM 参数引发的频繁 CMS GC](/blog/一个-jvm-参数引发的频繁-cms-gc)》文中提到的关于 “OldGen 的使用占比情况都没有达到 80%，什么原因导致的 CMS GC” 问题原因分析中的一个错误。
 
 引用下《[一个 JVM 参数引发的频繁 CMS GC](/blog/一个-jvm-参数引发的频繁-cms-gc)》文章的相关内容：
@@ -86,10 +87,11 @@ bool DefNewGeneration::collection_attempt_is_safe() {
   }
 ```
 
-### -XX:+CMSScavengeBeforeRemark 参数到底是不是引起频繁 CMS GC 的原因
+## -XX:+CMSScavengeBeforeRemark 参数到底是不是引起频繁 CMS GC 的原因
 从上面对于下一次 CMS GC 触发原因分析，其实主要原因是 YoungGen 的 to space 不为空，导致后续持续的 CMS GC，因为我们得定位下什么原因导致了 to space 不为空。
 我们来看看第一次 CMS GC 的日志
-#### 第一次 CMS GC日志
+
+### 第一次 CMS GC日志
 ```
 2019-03-28T20:05:06.906+0800: 3644459.373: [GC (CMS Initial Mark) [1 CMS-initial-mark: 2935428K(3354624K)] 3160044K(5242112K), 0.0586708 secs] [Times: user=0.22 sys=0.00, real=0.06 secs]
 2019-03-28T20:05:06.965+0800: 3644459.432: Total time for which application threads were stopped: 0.0616049 seconds, Stopping threads took: 0.0001381 seconds
@@ -168,11 +170,13 @@ Heap after GC invocations=18478 (full 731):
 这种说法乍一看是合理的，CMS GC 过程中有几个阶段是并发，确实会出现由于Allocation Failure 而导致 Young GC，但是 Allocation Failure 触发的 Young GC，如果出现晋升失败大部分情况下都是会直接触发 Full GC，来直接对整个堆进行回收，不会出现后续的频繁 CMS GC。
 因此，-XX:+CMSScavengeBeforeRemark 参数是可能会触发频繁 CMS GC 的。
 
-### 什么场景会出现这种问题
+## 什么场景会出现这种问题
 有些同学可能要问，我们线上很多业务都配置了 -XX:+CMSScavengeBeforeRemark 参数，为什么都没出现过频繁 CMS GC 的问题，该问题在什么场景下比较易触发呢？该问题的出现条件是什么？
 要了解在什么场景下比较容易触发，我们先来看看什么条件下会触发这个问题。
 主要有两个条件：
+
 * -XX:+CMSScavengeBeforeRemark 参数引起的 “promotion failed”  的 Young GC，致使 to space 不为空；
+
 * 长时间没有 Allocation Failure 引起的 Young GC。
 
 了解了这两个条件，就能解释为什么一般业务配置了这个参数，但是没有出现过类似频繁 CMS GC 的情况。
@@ -180,10 +184,12 @@ Heap after GC invocations=18478 (full 731):
 另外，一般业务的 Allocation Failure 引起的 Young GC 比较频繁，即使发生第一个条件，也很快会出现 Allocation Failure 引起的 “promotion failed” 的 Young GC，进而触发 Full GC 恢复，因此，即使出现时间持续时间也很短。
 
 文章中的案例，就是符合两个条件，进而导致频繁 CMS GC。
+
 * 晋升对象比较大，很容易导致 “-XX:+CMSScavengeBeforeRemark 参数引起的 “promotion failed”  的 Young GC” 这种情况；
+
 * 长时间才会出现一次 Young GC， 又满足了 “长时间没有 Allocation Failure 引起的 Young GC” 条件。
 
-### 有哪些优化策略
+## 有哪些优化策略
 
 * 去掉 -XX:+CMSScavengeBeforeRemark 参数
 CMS GC 过程中不强制触发 Young GC，自然降低了 “promotion failed” Young GC 的出现次数，也不会导致 to space 不为空，进而降低了导致频繁 CMS GC 的可能。
@@ -194,7 +200,7 @@ CMS GC 过程中不强制触发 Young GC，自然降低了 “promotion failed�
 * 提高 Young GC 的频率
 可以通过减小 YoungGen 的大小，来加快因 Allocation Failure 而触发 Young GC，这样即使出现该问题，也能尽快触发 Full GC 恢复。
 
-## 总结
+# 总结
 针对上述分析可知，-XX:+CMSScavengeBeforeRemark 参数确实是与案例中频繁 CMS GC 是相关的，只是出现的该问题的条件比较苛刻，不太容易出现；另外，针对问题出现的条件，是有些办法可以避免该问题或者降低该问题的出现概率。
 
 

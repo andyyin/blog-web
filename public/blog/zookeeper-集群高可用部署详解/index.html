@@ -16,8 +16,11 @@
         "description" : "介绍 Zookeeper 我想大家都不陌生，在很多场合都听到它的名字。它是 Apache 的一个顶级项目，为分布式应用提供一致性高性能协调服务。可以用来做：配置维护、域名服务、分布式锁等。有很多开源组件，尤其是中间件领域，使用 Zookeeper 作为配置中心或者注册中心。例如，它是 Hadoop 和 HBase 的重要组件，是 Kafka 的管理和协调服务，是 Dubbo 等服务框架的注册中心等。
 本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
 原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
-架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色： * Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; * Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; * Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
-Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
+ Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
+ Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
+ Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
+  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
  基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N+1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。",
         "inLanguage" : "zh",
         "author" : "",
@@ -29,7 +32,7 @@ Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系�
         "datePublished": "2019-05-19 00:00:00 &#43;0000 UTC",
         "dateModified" : "2019-05-19 00:00:00 &#43;0000 UTC",
         "url" : "https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/",
-        "wordCount" : "235",
+        "wordCount" : "230",
         "keywords" : [ "Zookeeper","高可用","部署","Blog" ]
     }
     </script>
@@ -59,16 +62,22 @@ Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系�
 <meta name="twitter:description" content="介绍 Zookeeper 我想大家都不陌生，在很多场合都听到它的名字。它是 Apache 的一个顶级项目，为分布式应用提供一致性高性能协调服务。可以用来做：配置维护、域名服务、分布式锁等。有很多开源组件，尤其是中间件领域，使用 Zookeeper 作为配置中心或者注册中心。例如，它是 Hadoop 和 HBase 的重要组件，是 Kafka 的管理和协调服务，是 Dubbo 等服务框架的注册中心等。
 本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
 原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
-架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色： * Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; * Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; * Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
-Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
+ Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
+ Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
+ Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
+  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
  基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N&#43;1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。"/>
 
         <meta property="og:title" content="Zookeeper 集群高可用部署详解" />
 <meta property="og:description" content="介绍 Zookeeper 我想大家都不陌生，在很多场合都听到它的名字。它是 Apache 的一个顶级项目，为分布式应用提供一致性高性能协调服务。可以用来做：配置维护、域名服务、分布式锁等。有很多开源组件，尤其是中间件领域，使用 Zookeeper 作为配置中心或者注册中心。例如，它是 Hadoop 和 HBase 的重要组件，是 Kafka 的管理和协调服务，是 Dubbo 等服务框架的注册中心等。
 本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
 原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
-架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色： * Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; * Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; * Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
-Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
+ Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
+ Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
+ Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
+  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
  基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N&#43;1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/" />
@@ -84,14 +93,17 @@ Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系�
 <meta itemprop="description" content="介绍 Zookeeper 我想大家都不陌生，在很多场合都听到它的名字。它是 Apache 的一个顶级项目，为分布式应用提供一致性高性能协调服务。可以用来做：配置维护、域名服务、分布式锁等。有很多开源组件，尤其是中间件领域，使用 Zookeeper 作为配置中心或者注册中心。例如，它是 Hadoop 和 HBase 的重要组件，是 Kafka 的管理和协调服务，是 Dubbo 等服务框架的注册中心等。
 本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
 原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
-架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色： * Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; * Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; * Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
-Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
+ Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
+ Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
+ Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
+  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
  基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N&#43;1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。">
 
 
 <meta itemprop="datePublished" content="2019-05-19T00:00:00&#43;00:00" />
 <meta itemprop="dateModified" content="2019-05-19T00:00:00&#43;00:00" />
-<meta itemprop="wordCount" content="235">
+<meta itemprop="wordCount" content="230">
 
 
 
@@ -457,10 +469,15 @@ Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系�
 
 <h2 id="架构">架构</h2>
 
-<p>下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
-* Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
-* Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
-* Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。</p>
+<p>下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：</p>
+
+<ul>
+<li><p>Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;</p></li>
+
+<li><p>Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;</p></li>
+
+<li><p>Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。</p></li>
+</ul>
 
 <p>Client 是 Zookeeper 的客户端，请求发起方。
 <img src="https://andyyin.github.io/img/2019/05/zk-deploy/architecture.jpg" alt="Zookeeper 集群架构" /></p>
@@ -482,17 +499,25 @@ Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系�
 
 <h1 id="部署">部署</h1>
 
-<p>既然只要 Zookeeper 集群中存在超过一半的节点能够正常工作，集群就能够正常服务，那 Zookeeper 如果想要 Zookeeper 高可用岂不是很简单，是不是多部署几个节点不就好了呢？
-&gt; 多部署节点就高可用了？</p>
+<p>既然只要 Zookeeper 集群中存在超过一半的节点能够正常工作，集群就能够正常服务，那 Zookeeper 如果想要 Zookeeper 高可用岂不是很简单，是不是多部署几个节点不就好了呢？</p>
 
-<p>多部署节点，貌似确实是能够增强可用性，但是这里还需要考虑以下两个问题：
-* 多增加节点对性能和写可用性有影响
-增加节点，意味了能够容忍非正常节点数更多，听起来高可用是更高了。但是，节点数越多意味着 Leader 发出的提案需要更多的节点（半数以上）来接受提案，这必然增加提案 commit 的耗时，也就意味着对写请求的性能以及可用性影响比较大。因此，对于正常的业务系统来说需要完美的权衡利弊，来调整节点的个数。一般为 5 个或者 7 个节点。</p>
+<blockquote>
+<p>多部署节点就高可用了？</p>
+</blockquote>
+
+<p>多部署节点，貌似确实是能够增强可用性，但是这里还需要考虑以下两个问题：</p>
 
 <ul>
-<li>需要考虑容灾需求
-部署还得结合容灾要求，需要能在机房故障，地区故障时整个 Zookeeper 集群是否能正常对外提供服务。</li>
+<li>多增加节点对性能和写可用性有影响</li>
 </ul>
+
+<p>增加节点，意味了能够容忍非正常节点数更多，听起来高可用是更高了。但是，节点数越多意味着 Leader 发出的提案需要更多的节点（半数以上）来接受提案，这必然增加提案 commit 的耗时，也就意味着对写请求的性能以及可用性影响比较大。因此，对于正常的业务系统来说需要完美的权衡利弊，来调整节点的个数。一般为 5 个或者 7 个节点。</p>
+
+<ul>
+<li>需要考虑容灾需求</li>
+</ul>
+
+<p>部署还得结合容灾要求，需要能在机房故障，地区故障时整个 Zookeeper 集群是否能正常对外提供服务。</p>
 
 <h2 id="机房容灾">机房容灾</h2>
 
@@ -532,16 +557,20 @@ Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系�
 <img src="https://andyyin.github.io/img/2019/05/zk-deploy/threecenterdeploy.jpg" alt="两地三中心部署" /></p>
 
 <ul>
-<li><p>为什么投票节点（Follower 和 Leader）都放在“地区 1 中心 1”，而不是按照三机房类似的方案在三个中心都进行部署呢？
-这里是因为由于异地之间的物理距离比较长，网络传输时延比较大，导致集群的投票节点的决策时间比较长，进而影响写性能。试想一下，如果两地选用的是北京和上海两座城市，走专线网络延时约 30ms，在写数据时，需要半数节点同意提案，一个写请求才能成功。因此，一次写成功的时间会比较长。
-另外，异地之间的网络比较复杂，很容易出现集群重新选举，导致整个集群不可用，而且选举时间会比较长。
-因此，一般只在一个中心内做到三机房部署，其他中心都是用 Observer 节点，可以看出，部署上 Zookeeper 集群无法做到异地容灾的。</p></li>
-
-<li><p>为什么引入了 Observer 节点？
-Observer 能很好的对 Zookeeper 集群进行扩展，Observer 可以提供 Client 读写，但不参与投票。因此，Observer 节点对集群不影响投票耗时，也不影响集群选举。另外，加入 Observer 对读性能是一个很大的提升。</p></li>
+<li>为什么投票节点（Follower 和 Leader）都放在“地区 1 中心 1”，而不是按照三机房类似的方案在三个中心都进行部署呢？</li>
 </ul>
 
-<h4 id="三中心部署优化">三中心部署优化</h4>
+<p>这里是因为由于异地之间的物理距离比较长，网络传输时延比较大，导致集群的投票节点的决策时间比较长，进而影响写性能。试想一下，如果两地选用的是北京和上海两座城市，走专线网络延时约 30ms，在写数据时，需要半数节点同意提案，一个写请求才能成功。因此，一次写成功的时间会比较长。
+另外，异地之间的网络比较复杂，很容易出现集群重新选举，导致整个集群不可用，而且选举时间会比较长。
+因此，一般只在一个中心内做到三机房部署，其他中心都是用 Observer 节点，可以看出，部署上 Zookeeper 集群无法做到异地容灾的。</p>
+
+<ul>
+<li>为什么引入了 Observer 节点？</li>
+</ul>
+
+<p>Observer 能很好的对 Zookeeper 集群进行扩展，Observer 可以提供 Client 读写，但不参与投票。因此，Observer 节点对集群不影响投票耗时，也不影响集群选举。另外，加入 Observer 对读性能是一个很大的提升。</p>
+
+<h3 id="三中心部署优化">三中心部署优化</h3>
 
 <p>为了保护集群，在三个中心都部署上 Observer 节点，而 Client 只与 Observer 机点进行交互，用这种方式可以降低投票节点的工作负载，降低 Leader 和 Follower 的不稳定性，从而提高整个集群的稳定性和可用性。
 <img src="https://andyyin.github.io/img/2019/05/zk-deploy/threecenteroptimize.jpg" alt="两地三中心部署优化" /></p>

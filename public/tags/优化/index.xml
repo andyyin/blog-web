@@ -6,10 +6,25 @@
     <description>Recent content in 优化 on 涤生的博客</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>zh</language>
-    <lastBuildDate>Wed, 03 Apr 2019 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Wed, 10 Apr 2019 00:00:00 +0000</lastBuildDate>
     
 	<atom:link href="https://andyyin.github.io/tags/%E4%BC%98%E5%8C%96/index.xml" rel="self" type="application/rss+xml" />
     
+    
+    <item>
+      <title>再次剖析 “一个 JVM 参数引发的频繁 CMS GC”</title>
+      <link>https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/</link>
+      <pubDate>Wed, 10 Apr 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/</guid>
+      <description>前言 前几天这篇《一个 JVM 参数引发的频繁 CMS GC》文章发出之后，反应比较激烈，因为这可能与同学们通常 GC 优化经验相悖，通常有很多业务都通过添加 -XX:+CMSScavengeBeforeRemark 参数，来降低 CMS-remark 的时间，进而提升业务的性能以及可用性。
+背景 这里给出几位同学比较典型的的想法和建议： “同学1”：“-XX:+CMSScavengeBeforeRemark 参数引发的频繁 CMS GC 有失偏颇，其实根本原因是第一次 CMS GC 过程中的 Young GC 发生了 ‘promotion failed’ 导致了 to space 不为空”。
+“同学2”：“我们线上也用了这个参数，没有出现频繁 CMS GC 的现象，我猜测你那种是特殊场景导致的，并不是用了那个参数就一定会导致频繁 CMS GC，大部分情况下加上这个参数是有好处的”。
+“同学3”：“是不是可以降低 -XX:CMSInitiatingOccupancyFraction 参数的值来，比如70，让 Young GC成功”。
+针对这几位同学提到的想法和建议，我又重新思考这个案例，来解答下这些的问题。因此，这篇文章是《一个 JVM 参数引发的频繁 CMS GC》的进阶版本。
+主要内容 本文主要讲解：
+  纠正《一个 JVM 参数引发的频繁 CMS GC》文章中的一个分析错误 -XX:+CMSScavengeBeforeRemark 参数到底是不是引起频繁 CMS GC 的原因 什么场景会出现这种问题 有哪些优化策略   内容 纠正《一个 JVM 参数引发的频繁 CMS GC》文章中的一个错误 这里纠正《一个 JVM 参数引发的频繁 CMS GC》文中提到的关于 “OldGen 的使用占比情况都没有达到 80%，什么原因导致的 CMS GC” 问题原因分析中的一个错误。</description>
+    </item>
     
     <item>
       <title>一个 JVM 参数引发的频繁 CMS GC</title>
@@ -21,20 +36,6 @@
 大家都知道CMS GC 只会回收 OldGen 的对象，那为什么需要这个参数？ 由于 YoungGen 存在引用 OldGen 对象的情况，因此 CMS-remark 阶段会将 YoungGen 作为 OldGen 的 “GC ROOTS” 进行扫描，防止回收了不该回收的对象。而配置 -XX:+CMSScavengeBeforeRemark 参数，在 CMS GC 的 CMS-remark 阶段开始前先进行一次 Young GC，有利于减少 Young Gen 对 Old Gen 的无效引用，降低 CMS-remark 阶段的时间开销。
 这篇文章的内容是业务开发同学遇到的奇怪的频繁 CMS GC 问题，我们一起定位排查，最终发现跟 -XX:CMSScavengeBeforeRemark 参数相关。
 问题 频繁 Full GC 业务开发同学通过监控发现线上一台机器频繁 CMS GC，下图是 CMS GC 监控图，大约从 20 点 5-15 分，每分钟 8-11 次的持续 CMS GC。  说明：公司监控对 Old GC 与 Full GC 是不区分的，案例中讲的其实是 CMS GC。</description>
-    </item>
-    
-    <item>
-      <title>再次剖析 “一个 JVM 参数引发的频繁 CMS GC”</title>
-      <link>https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/</link>
-      <pubDate>Wed, 03 Apr 2019 00:00:00 +0000</pubDate>
-      
-      <guid>https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/</guid>
-      <description>前言 前几天这篇《一个 JVM 参数引发的频繁 CMS GC》文章发出之后，反应比较激烈，因为这可能与同学们通常 GC 优化经验相悖，通常有很多业务都通过添加 -XX:+CMSScavengeBeforeRemark 参数，来降低 CMS-remark 的时间，进而提升业务的性能以及可用性。
-背景 这里给出几位同学比较典型的的想法和建议： “同学1”：“-XX:+CMSScavengeBeforeRemark 参数引发的频繁 CMS GC 有失偏颇，其实根本原因是第一次 CMS GC 过程中的 Young GC 发生了 ‘promotion failed’ 导致了 to space 不为空”。
-“同学2”：“我们线上也用了这个参数，没有出现频繁 CMS GC 的现象，我猜测你那种是特殊场景导致的，并不是用了那个参数就一定会导致频繁 CMS GC，大部分情况下加上这个参数是有好处的”。
-“同学3”：“是不是可以降低 -XX:CMSInitiatingOccupancyFraction 参数的值来，比如70，让 Young GC成功”。
-针对这几位同学提到的想法和建议，我又重新思考这个案例，来解答下这些的问题。因此，这篇文章是《一个 JVM 参数引发的频繁 CMS GC》的进阶版本。
-主要内容 本文主要讲解： &amp;gt; 1. 纠正《一个 JVM 参数引发的频繁 CMS GC》文章中的一个分析错误 &amp;gt; 2. -XX:+CMSScavengeBeforeRemark 参数到底是不是引起频繁 CMS GC 的原因 &amp;gt; 3. 什么场景会出现这种问题 &amp;gt; 4. 有哪些优化策略</description>
     </item>
     
   </channel>

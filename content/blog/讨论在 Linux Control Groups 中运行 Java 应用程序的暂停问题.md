@@ -20,12 +20,15 @@ type = "post"
 # 前言
 基于 Linux [cgroups](https://en.wikipedia.org/wiki/Cgroups)[2]的解决方案（例如，[Docker](https://en.wikipedia.org/wiki/Docker_%28software%29)[3]，[CoreOS](https://en.wikipedia.org/wiki/CoreOS)[4]）越来越多地用于在同一主机上托管多个应用程序。我们一直在 LinkedIn 上使用 cgroups 来构建我们自己的[容器化](https://engineering.linkedin.com/blog/2016/05/rain--better-resource-allocation-through-containerization)[5]产品 [LPS](https://engineering.linkedin.com/blog/2016/04/faster-and-easier-service-deployment-with-lps--our-new-private-c)[6]（LinkedIn 平台即服务），并研究资源限制策略对应用程序性能的影响。这篇文章介绍了我们关于 CPU 调度如何影响 cgroups 中 Java 应用程序性能的一些发现。我们发现，在将 [CFS](https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt)[7]（完全公平调度程序）与 CFS 带宽控制的配额结合使用时，Java 应用程序可能会有越来越长的暂停。在这些暂停期间，应用程序不能响应用户请求，因此，这是我们需要分析和解决这个严重性能问题。
 这些增多的暂停是由 JVM 的 GC（垃圾收集）机制和 CFS 调度之间的交互引起的。在 CFS 中，为 cgroup 分配了一定的 CPU 配额（即 cfs_quota），这会被 JVM GC 的多线程活动快速耗尽，从而导致应用程序受到限制。例如，可能会发生以下情况：
+
 1. 如果一个应用程序在一个调度期间积极地使用其 CPU 配额，那么该应用程序就会受到限制（不再使用 CPU），并在调度期间的剩余持续时间内停止响应。
 
 2. 多线程的 JVM GC 会使问题更加严重，因为应用程序的所有线程都计算了cfs_quota（配额）。因此，CPU 配额可能会更快地用完。JVM GC 有许多非 STW（stop the world）的并发阶段。但是，它们的运行也会导致更快的使用完 CPU 配额，因此，实际上将整个应用程序设置为 STW（stop the world）。
 
 在本文中，我们将分享我们研究这个问题之后的发现，以及我们关于 CFS/JVM 调优以减轻负面影响的建议。具体而言：
+
 1. 应该将足够的 CPU 配额分配给承载 Java 应用程序的 CGROUP；
+
 2. 应该适当地调低 JVM GC 线程，以缓解暂停。
 
 # Linux cgroups 背景
@@ -35,9 +38,13 @@ Linux cgroups（控制组）用于限制应用程序的各种类型资源的使�
 # 工作负载和配置情况
 为了进行分析，我们创建了一个用于测试 CFS 行为的 Java 应用程序。这个 Java 应用程序简单地在 Java 堆上分配对象。当分配的对象数量达到某个阈值后，将释放其中的一部分。有两个应用程序线程，每个线程独立地执行对象分配和对象释放。每个对象分配所花费的时间记录为分配延迟。这个测试 Java 应用程序的源代码位于 [GitHub](https://github.com/zhenyun/cgroupsGC)[9] 上。
 我们考虑的性能指标包括：
+
 （1）应用程序吞吐量（对象分配率）; 
+
 （2）对象分配延迟; 
+
 （3）cgroup 的统计信息，包括 cgroup 的 CPU 使用率，nr_throttled（受限制的 CFS 周期数）和 throttled_time（总限制时间）。
+
 我们使用的机器是 RHEL7，内核为 3.10.0-327，它有 24 个 HT（超线程）内核。使用 CFS 上限强制限制 CPU 资源。默认情况下，托管 Java 应用程序的 cgroup 被分配了三个 CPU 共享核心，考虑到有两个应用程序线程和 GC 活动。在以后的测试中，我们还改变了分配的核心数量，以获得更多的信息。默认情况下，cfs_period 为 100 毫秒。每次运行工作需要 20 分钟（1200 秒）。因此，当 cfs_period 为 100ms 时，每次运行中有 12,000 个 CFS 周期。
 
 # 排查应用长时间暂停
@@ -139,7 +146,9 @@ CFS 调度程序可能导致应用程序长时间的暂停。有些情况下，c
 
 # 建议
 我们已经看到，由于 JVM GC 和 CFS 调度之间的交互，在 Linux cgroup 中运行的 Java 应用程序可能会遇到更长的应用程序暂停。为缓解此问题，我们建议您使用以下调整：
+
 1. 充分配置 CPU 资源（即 CFS 配额）。显然，分配给 cgroup 的 CPU 配额越大，cgroup 被限制的可能性就越小。
+
 2. 适当调整 GC 线程。
 
 ## 充分配置 CPU 资源

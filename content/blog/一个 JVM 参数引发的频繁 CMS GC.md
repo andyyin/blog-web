@@ -53,6 +53,7 @@ type = "post"
 
 # 分析
 GC 监控图展示的还不够全面，具体问题还是要通过 GC 日志进行定位，因为 GC 日志中的信息更丰富。
+
 ## GC 日志
 为了分析问题，这里选取了第一次、第二次、第三次-第 N 次的 CMS GC 日志。
 
@@ -130,6 +131,7 @@ Heap after GC invocations=18478 (full 731):
 2019-03-28T20:05:24.210+0800: 3644476.678: Application time: 0.7671567 seconds
 ```
 看第一次 CMS GC 日志，有以下四个发现：
+
 1. 由日志 “CMS-initial-mark: 2935428K(3354624K)”可知，第一次 CMS GC 是因为 2935428 / 3354624 = 87.5% > 80%，与此前监控图分析一致。
 
 2. 由日志 “2019-03-28T20:05:22.211+0800: 3644474.678: [CMS-concurrent-reset: 0.007/0.007 secs]” 可知，第一次 CMS GC 完成具体时间是 20:05:22.211。
@@ -151,7 +153,7 @@ Heap after GC invocations=18478 (full 731):
 }
  ```
 
-###第二次 CMS GC 日志
+### 第二次 CMS GC 日志
 ```
 
 2019-03-28T20:05:24.213+0800: 3644476.680: [GC (CMS Initial Mark) [1 CMS-initial-mark: 899032K(3354624K)] 1548664K(5242112K), 0.2663899 secs] [Times: user=0.82 sys=0.00, real=0.27 secs]
@@ -202,6 +204,7 @@ Heap after GC invocations=18479 (full 732):
 2019-03-28T20:05:34.476+0800: 3644486.943: Application time: 0.3111430 seconds
 ```
 看第二次 CMS GC 日志，有以下四个发现：
+
 1. 由日志 “CMS-initial-mark: 899032K(3354624K)” 可知，其实第一次 CMS GC 是已经回收了 OldGen，而且释放了大量空间，OldGen 的使用占比只有 899032 / 3354624 = 26.8%，很奇怪为什么会进行 CMS GC？
 
 2. 由日志 “2019-03-28T20:05:24.213+0800: 3644476.680: [GC (CMS Initial Mark)” 可知，第二次 CMS GC 开始的具体时间是 20:05:24.213，上次 CMS GC 结束时间 20:05:22.211 相差 2s。
@@ -233,14 +236,20 @@ Heap after GC invocations=18479 (full 732):
 ......
 ```
 看第三次-第 N 次 CMS GC 日志，有三个发现：
+
 1. 由日志 “CMS-initial-mark: 573449K(3354624K)” 可知，OldGen 的使用占比只有 573449 / 3354624= 17.1%，很奇怪为什么会进行 CMS GC？
+
 2. 由日志 “2019-03-28T20:05:34.478+0800: 3644486.945: [GC (CMS Initial Mark)” 可知，第三次 CMS GC 的开始时间 20:05:34.478 与 第二次 CMS GC 结束时间 20:05:32.476 又相差 2s。
+
 3. 由于配置了 -XX:+CMSScavengeBeforeRemark 参数，CMS GC 过程中依然包含一次 Young GC。
+
 4. Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况依然存在，只是 eden space 由使用比率增长。
+
    很奇怪，OldGen 空闲空间很大，为什么 Young GC 好像没起作用？
    
 ## 根源定位
 通过日志分析，，大家很容易发现三个问题：
+
 * 每次 CMS GC 都是相隔 2s？
 这其实是 CMS background collector 的策略，每隔 CMSWaitDuration（默认为2000ms） 时间进行一次检测，若发现满足 CMS GC 触发条件，就进行一次 CMS background collector。
 
@@ -464,6 +473,7 @@ bool DefNewGeneration::collection_attempt_is_safe() {
   return _old_gen->promotion_attempt_is_safe(used());
 }
 ```
+
 #### Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况
 看到这里，其实这个问题也很好解释了，我们看 ParNewGeneration::collect 函数中的这段代码就明白了，YoungGC 遇到 to space 不为空的情况下，直接 set_incremental_collection_failed() 完就返回了，并没有进行真正的 Young GC。
 ```
@@ -472,6 +482,7 @@ bool DefNewGeneration::collection_attempt_is_safe() {
     return;
   }
 ```
+
 #### 罪魁祸首
 看到这里，你一定在想，那罪魁祸首到底是谁呢？表面上看是 to space 不为空导致触发了 Young GC，然后设置了 incremental_collection_failed 参数，进而满足了 CMS GC 触发条件。实质上是因为配置了  -XX:CMSScavengeBeforeRemark 参数，CMS GC 阶段强制进行了 Young GC，导致 to space 不为空，因此这个锅得由 -XX:CMSScavengeBeforeRemark 参数来背。
 
@@ -526,8 +537,11 @@ concurrent mark-sweep generation total 3354624K, used 554147K [0x00000006f340000
 
 ## 该怎么避免呢
 一时也没有想到很好的办法，两个参考方案：
+
 * 去掉 -XX:CMSScavengeBeforeRemark 参数
+
 * 降低 YoungGen 大小，加快因 Allocation Failure 而触发正常 Young GC
+
 
 
 ******

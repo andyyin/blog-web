@@ -10,7 +10,7 @@ date = "2015-04-09"
 <br/>
 ## 联系方式
 ******
-* Email：yyqqyinqi568@126.com
+* Email：[yyqqyinqi568@126.com](mailto:yyqqyinqi568@126.com)
 * 微信号：jackYinQi（添加好友请注明：姓名+公司+来意）
 
 ![微信二维码](/img/main/wechat.jpeg)
