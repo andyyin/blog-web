@@ -613,6 +613,174 @@
 </article>
 
         
+            <article class="post">
+  <header>
+    <div class="title">
+        
+            <h2><a href="https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/">一次 Young GC 的优化实践（FinalReference 相关）</a></h2>
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2019-02-23'>
+            2019-02-23</time>
+        <span class="author">涤生</span>
+        
+            <p>3 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+  
+
+  
+  <p>博客已经好久没有更新了，主要原因是 18 年下半年工作比较忙，另外也没有比较有意思的题材，所以迟迟没有更新。
+此篇是 18 年底的微信上的某同学提供的一个 Young GC 问题案例，找我帮忙解决。这个 GC 案例比较有意思，虽然过去有一段时间了，但是想想觉得还是有必要写出来，应该对大家很有帮助。
+排查问题有点像侦探断案，先分析各种可能性，再按照获得的一个个证据，去排除各种可能性、然后定位原因，最终解决问题。</p>
+  <footer>
+    <ul class="actions">
+      <li><a href="https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/" class="button big">阅读</a></li>
+    </ul>
+  <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/young-gc">Young GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E4%BC%98%E5%8C%96">优化</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/finalreference">FinalReference</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+</article>
+
+        
+            <article class="post">
+  <header>
+    <div class="title">
+        
+            <h2><a href="https://andyyin.github.io/blog/phantomreference%E5%AF%BC%E8%87%B4cms-gc%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/">PhantomReference 导致 CMS GC 耗时严重</a></h2>
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2018-02-02'>
+            2018-02-02</time>
+        <span class="author">涤生</span>
+        
+            <p>6 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+  
+
+  
+  <p>GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。</p>
+  <footer>
+    <ul class="actions">
+      <li><a href="https://andyyin.github.io/blog/phantomreference%E5%AF%BC%E8%87%B4cms-gc%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/" class="button big">阅读</a></li>
+    </ul>
+  <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/young-gc">Young GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E4%BC%98%E5%8C%96">优化</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/phantomreference">PhantomReference</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+</article>
+
+        
 
         
 <ul class="actions pagination">
@@ -841,16 +1009,8 @@
           <article>
             <header>
               
-            </header>
-          </article>
-        </p>
-        
-        <p>
-          <article>
-            <header>
-              
                 <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
               
             </header>
           </article>
@@ -861,7 +1021,15 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
               
             </header>
           </article>

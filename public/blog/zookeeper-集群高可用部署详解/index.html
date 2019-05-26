@@ -17,10 +17,7 @@
 本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
 原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
 架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
- Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
- Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
- Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
-  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+ Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
  基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N+1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。",
         "inLanguage" : "zh",
         "author" : "",
@@ -32,7 +29,7 @@
         "datePublished": "2019-05-19 00:00:00 &#43;0000 UTC",
         "dateModified" : "2019-05-19 00:00:00 &#43;0000 UTC",
         "url" : "https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/",
-        "wordCount" : "230",
+        "wordCount" : "232",
         "keywords" : [ "Zookeeper","高可用","部署","Blog" ]
     }
     </script>
@@ -63,10 +60,7 @@
 本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
 原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
 架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
- Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
- Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
- Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
-  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+ Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
  基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N&#43;1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。"/>
 
         <meta property="og:title" content="Zookeeper 集群高可用部署详解" />
@@ -74,10 +68,7 @@
 本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
 原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
 架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
- Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
- Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
- Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
-  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+ Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
  基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N&#43;1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。" />
 <meta property="og:type" content="article" />
 <meta property="og:url" content="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/" />
@@ -94,16 +85,13 @@
 本文不探讨它的优缺点，仅着眼于如何对 Zookeeper 进行高可用部署。
 原理 在介绍高可用部署前，我们先了解下 Zookeeper 的基本知识，这对充分理解它的高可用部署非常重要。
 架构 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
- Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
- Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
- Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
-  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
+ Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生; Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票; Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。  Client 是 Zookeeper 的客户端，请求发起方。 高可用  Zookeeper 系统中只要集群中存在超过一半的节点（这里指的是投票节点即非 Observer 节点）能够正常工作，那么整个集群就能够正常对外服务
  基于此，如果想搭建一个能够允许 N 台机器 down 掉的集群，那么就要部署一个由 2*N&#43;1 台服务器构成的 ZooKeeper 集群。 因此，如果部署了 3 个 Zookeeper 节点（非 Observer），则如果至少有 2个节点可用则整个集群就可用，意味着 1 个节点故障，不影响 Zookeeper 集群对外提供服务；如果部署了 5 个节点，意味着 2 个节点同时故障，Zookeeper 集群依然能够正常对外提供服务。">
 
 
 <meta itemprop="datePublished" content="2019-05-19T00:00:00&#43;00:00" />
 <meta itemprop="dateModified" content="2019-05-19T00:00:00&#43;00:00" />
-<meta itemprop="wordCount" content="230">
+<meta itemprop="wordCount" content="232">
 
 
 
@@ -472,11 +460,9 @@
 <p>下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：</p>
 
 <ul>
-<li><p>Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;</p></li>
-
-<li><p>Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;</p></li>
-
-<li><p>Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。</p></li>
+<li>Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;</li>
+<li>Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;</li>
+<li>Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。</li>
 </ul>
 
 <p>Client 是 Zookeeper 的客户端，请求发起方。
@@ -581,7 +567,13 @@
 
 <hr />
 
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
 <p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
 
 <p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
 
@@ -855,16 +847,8 @@
           <article>
             <header>
               
-            </header>
-          </article>
-        </p>
-        
-        <p>
-          <article>
-            <header>
-              
                 <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
               
             </header>
           </article>
@@ -875,7 +859,15 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
               
             </header>
           </article>

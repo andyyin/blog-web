@@ -133,13 +133,11 @@ Heap after GC invocations=18478 (full 731):
 看第一次 CMS GC 日志，有以下四个发现：
 
 1. 由日志 “CMS-initial-mark: 2935428K(3354624K)”可知，第一次 CMS GC 是因为 2935428 / 3354624 = 87.5% > 80%，与此前监控图分析一致。
-
 2. 由日志 “2019-03-28T20:05:22.211+0800: 3644474.678: [CMS-concurrent-reset: 0.007/0.007 secs]” 可知，第一次 CMS GC 完成具体时间是 20:05:22.211。
-
 3. 由日志 “[GC (Allocation Failure) 3644462.647: [ParNew: 1887488K->201195K(1887488K), 0.4228807 secs]” 和日志 “[GC (CMS Final Remark) 3644463.375: [ParNew (promotion failed): 434406K->315478K(1887488K), 5.8407801 secs]”可知，第一次 CMS GC 日志中包含两次 Young GC，并且第一次 YoungGC 是由于 Allocation Failure，而第二次是因为什么呢，其实是因为配置了-XX:+CMSScavengeBeforeRemark 参数，因此在 CMS-remark 阶段前进行了一次 YoungGC。
-
 4. 除了以上的信息，还有个奇怪的现象是，Young GC 后 eden、from、to 三个 space 的使用量都不是 0 使用的情况，正常情况 Young GC 后 eden 和 to space 的使用量应该是 0。 
    这里其实不奇怪，通过日志 “concurrent mark-sweep generation total 3354624K, used 3171231K” 可知，OldGen 所剩无几，而且还可能存在碎片，这会导致 Young GC 晋升的对象，无处安放，导致 Young GC 回收停止了。
+
  ```
  2019-03-28T20:05:10.907+0800: 3644463.375: [GC (CMS Final Remark) 3644463.375: [ParNew (promotion failed): 434406K->315478K(1887488K), 5.8407801 secs] 3512406K->3486710K(5242112K), 5.8410096 secs] [Times: user=6.84 sys=1.31, real=5.84 secs]
 Heap after GC invocations=18478 (full 731):
@@ -206,12 +204,10 @@ Heap after GC invocations=18479 (full 732):
 看第二次 CMS GC 日志，有以下四个发现：
 
 1. 由日志 “CMS-initial-mark: 899032K(3354624K)” 可知，其实第一次 CMS GC 是已经回收了 OldGen，而且释放了大量空间，OldGen 的使用占比只有 899032 / 3354624 = 26.8%，很奇怪为什么会进行 CMS GC？
-
 2. 由日志 “2019-03-28T20:05:24.213+0800: 3644476.680: [GC (CMS Initial Mark)” 可知，第二次 CMS GC 开始的具体时间是 20:05:24.213，上次 CMS GC 结束时间 20:05:22.211 相差 2s。
-
 3. 由日志 “[GC (CMS Final Remark) 3644477.934: [ParNew: 649871K->649871K(1887488K), 0.0000289 secs]” 可知，第二次 CMS GC 日志中包含一次 Young GC，毫无疑问是因为配置了-XX:+CMSScavengeBeforeRemark 参数导致的。
-
 4. Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况依然存在，只是 eden space 由使用比率 13% 增加到 33%。
+
    很奇怪，此时通过日志 “concurrent mark-sweep generation total 3354624K, used 899032K” 可知，OldGen 空闲空间很大，为什么 Young GC 好像没起作用。
 
     ```
@@ -238,11 +234,8 @@ Heap after GC invocations=18479 (full 732):
 看第三次-第 N 次 CMS GC 日志，有三个发现：
 
 1. 由日志 “CMS-initial-mark: 573449K(3354624K)” 可知，OldGen 的使用占比只有 573449 / 3354624= 17.1%，很奇怪为什么会进行 CMS GC？
-
 2. 由日志 “2019-03-28T20:05:34.478+0800: 3644486.945: [GC (CMS Initial Mark)” 可知，第三次 CMS GC 的开始时间 20:05:34.478 与 第二次 CMS GC 结束时间 20:05:32.476 又相差 2s。
-
 3. 由于配置了 -XX:+CMSScavengeBeforeRemark 参数，CMS GC 过程中依然包含一次 Young GC。
-
 4. Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况依然存在，只是 eden space 由使用比率增长。
 
    很奇怪，OldGen 空闲空间很大，为什么 Young GC 好像没起作用？
@@ -252,10 +245,8 @@ Heap after GC invocations=18479 (full 732):
 
 * 每次 CMS GC 都是相隔 2s？
 这其实是 CMS background collector 的策略，每隔 CMSWaitDuration（默认为2000ms） 时间进行一次检测，若发现满足 CMS GC 触发条件，就进行一次 CMS background collector。
-
 * 第二次及后面的 CMS GC，OldGen 的使用占比情况都没有达到 80%，很疑惑是什么导致了 CMS GC？
 通过上面的分析，其实只要知道是什么满足了 CMS GC 触发条件而导致了 CMS GC，就能回答第二个问题。
-
 * Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况，而且 OldGen 空闲空间很大，为什么 Young GC 好像没起作用。
 
     
@@ -265,16 +256,12 @@ Heap after GC invocations=18479 (full 732):
 
 * “if (_full_gc_requested)”
 这是由 System.gc() 调用且配置了 -XX:+ExplicitGCInvokesConcurrent 参数的情况下，会触发一次 CMS GC。但如果是 System.gc()，每次 CMS GC 的间隔时间不可能一直是 2s，故显然不符合。
-
 * “if (!UseCMSInitiatingOccupancyOnly)”
 这是在没有配置 -XX:+UseCMSInitiatingOccupancyOnly 参数的情况下，可能触发 CMS GC 的情况，故显然不符合。
-
 * “if (_cmsGen->should_concurrent_collect())”
 这是 -XX:+UseCMSInitiatingOccupancyOnly 参数的情况下，如果 OldGen 使用占比达到 -XX:CMSInitiatingOccupancyFraction 参数设置值，就会触发 CMS GC，但第二次、第三-第 N 次明显不符合情况。
-
 *  “if (gch->incremental_collection_will_fail(true /* consult_young */))”
 这是一种悲观策略，判断新生代回收是否会失败，如果最近一次 Young GC 已经失败或者可能会失败，就会触发一次 CMS GC。这是符合本文说的情况的。
-
 * “if (MetaspaceGC::should_concurrent_collect())”
 这是 Metaspace 满足 CMS GC 触发条件的情况，根据日志 “ Metaspace       used 90199K, capacity 91456K, committed 91776K, reserved 1130496K” 中 Metaspace 空间使用情况，显然不符合。
 * “if (CMSTriggerInterval >= 0)”
@@ -539,13 +526,15 @@ concurrent mark-sweep generation total 3354624K, used 554147K [0x00000006f340000
 一时也没有想到很好的办法，两个参考方案：
 
 * 去掉 -XX:CMSScavengeBeforeRemark 参数
-
 * 降低 YoungGen 大小，加快因 Allocation Failure 而触发正常 Young GC
 
 
 
 ******
-欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。
+> 涤生的博客。
+
+> 转载请注明原创出处，谢谢！
+
+> 欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。
 
 ![涤生-微信公共号](/img/main/officialAccount.jpg)
-

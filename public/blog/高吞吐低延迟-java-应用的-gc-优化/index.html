@@ -28,7 +28,7 @@
         "datePublished": "2019-04-21 00:00:00 &#43;0000 UTC",
         "dateModified" : "2019-04-21 00:00:00 &#43;0000 UTC",
         "url" : "https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/",
-        "wordCount" : "674",
+        "wordCount" : "676",
         "keywords" : [ "高可用","低延时","Java","GC","CMS","Blog" ]
     }
     </script>
@@ -87,7 +87,7 @@
 
 <meta itemprop="datePublished" content="2019-04-21T00:00:00&#43;00:00" />
 <meta itemprop="dateModified" content="2019-04-21T00:00:00&#43;00:00" />
-<meta itemprop="wordCount" content="674">
+<meta itemprop="wordCount" content="676">
 
 
 
@@ -476,14 +476,10 @@
 
 <ul>
 <li>Stop-the-world 回收器回收垃圾时会暂停应用线程。停顿的时长和频率不应该对应用遵守 SLA 产生不利的影响。</li>
-
-<li><p>并发 GC 算法与应用线程竞争 CPU 周期。这个开销不应该影响应用吞吐量。</p></li>
-
-<li><p>非压缩 GC 算法会引起堆碎片化，进而导致的 Full GC 长时间 Stop-the-world，因此，堆碎片应保持在最小值。</p></li>
-
-<li><p>垃圾回收工作需要占用内存。某些 GC 算法具有比其他算法更高的内存占用。如果应用程序需要较大的堆空间，要确保 GC 的内存开销不能太大。</p></li>
-
-<li><p>要清楚地了解 GC 日志和常用的 JVM 参数，以便轻松地调整 GC 行为。因为 GC 运行随着代码复杂性增加或工作负载特性的改变而发生变化</p></li>
+<li>并发 GC 算法与应用线程竞争 CPU 周期。这个开销不应该影响应用吞吐量。</li>
+<li>非压缩 GC 算法会引起堆碎片化，进而导致的 Full GC 长时间 Stop-the-world，因此，堆碎片应保持在最小值。</li>
+<li>垃圾回收工作需要占用内存。某些 GC 算法具有比其他算法更高的内存占用。如果应用程序需要较大的堆空间，要确保 GC 的内存开销不能太大。</li>
+<li>要清楚地了解 GC 日志和常用的 JVM 参数，以便轻松地调整 GC 行为。因为 GC 运行随着代码复杂性增加或工作负载特性的改变而发生变化</li>
 </ul>
 
 <p>我们使用 Linux 操作系统、Hotspot <a href="https://www.oracle.com/technetwork/java/javase/7u51-relnotes-2085002.html">Java7u51</a>、32GB 堆内存、6GB 新生代（Young Gen）和 -XX:CMSInitiatingOccupancyFraction 值为 70（Old GC 触发时其空间占用率）开始实验。设置较大的堆内存是用来维持长期存活对象的对象缓存。一旦这个缓存生效，晋升到 Old Gen 的对象速度会显著下降。</p>
@@ -510,9 +506,8 @@
 <p>在 Hotspot JVM 中，Young GC 停顿时间取决于一次垃圾回收后存活下来的对象的数量，而不是 Young Gen 自身的大小。增加 Young Gen 大小对于应用性能的影响需要仔细评估：</p>
 
 <ul>
-<li><p>如果更多的数据存活而且被复制到 Survivor 区域，或者每次 GC 更多的数据晋升到 Old Gen，增加 Young Gen 大小可能导致更长的 Young GC 停顿。较长的 GC 停顿可能会导致应用程序延迟增加和(或)吞吐量降低。</p></li>
-
-<li><p>另一方面，如果每次垃圾回收后存活对象数量不会大幅增加，停顿时间可能不会延长。在这种情况下，降低 GC 频率可能会使整个应用总体延迟降低和(或)吞吐量增加。</p></li>
+<li>如果更多的数据存活而且被复制到 Survivor 区域，或者每次 GC 更多的数据晋升到 Old Gen，增加 Young Gen 大小可能导致更长的 Young GC 停顿。较长的 GC 停顿可能会导致应用程序延迟增加和(或)吞吐量降低。</li>
+<li>另一方面，如果每次垃圾回收后存活对象数量不会大幅增加，停顿时间可能不会延长。在这种情况下，降低 GC 频率可能会使整个应用总体延迟降低和(或)吞吐量增加。</li>
 </ul>
 
 <p>对于大部分为短期存活对象的应用，仅仅需要控制上述的参数；对于长期存活对象的应用，就需要注意，被晋升的对象可能很长时间都不能被 Old GC 周期回收。如果 Old GC 触发阈值（Old Gen 占用率百分比）比较低，应用将陷入持续的 GC 循环中。可以通过设置高的 GC 触发阈值可避免这一问题。</p>
@@ -578,9 +573,8 @@
 <p>对于该 Feed 平台原型系统，我们使用 Hotspot JVM 的两个 GC 算法优化垃圾回收：</p>
 
 <ul>
-<li><p>Young GC 使用 ParNew，Old GC 使用 CMS。</p></li>
-
-<li><p>Young Gen 和 Old Gen 使用 G1。G1 试图解决堆大小为 6GB 或更大时，暂停时间稳定且可预测在 0.5 秒以下的问题。在我们用 G1 实验过程中，尽管调整了各种参数，但没有得到像 ParNew/CMS 一样的 GC 性能或停顿时间的可预测值。我们查询了使用 G1 发生内存泄漏相关的一个 bug[3]，但还不能确定根本原因。</p></li>
+<li>Young GC 使用 ParNew，Old GC 使用 CMS。</li>
+<li>Young Gen 和 Old Gen 使用 G1。G1 试图解决堆大小为 6GB 或更大时，暂停时间稳定且可预测在 0.5 秒以下的问题。在我们用 G1 实验过程中，尽管调整了各种参数，但没有得到像 ParNew/CMS 一样的 GC 性能或停顿时间的可预测值。我们查询了使用 G1 发生内存泄漏相关的一个 bug[3]，但还不能确定根本原因。</li>
 </ul>
 
 <p>使用 ParNew/CMS，应用每三秒进行一次 40-60ms 的 Young GC 和每小时一个 CMS GC。JVM 参数如下：</p>
@@ -612,7 +606,13 @@
 
 <hr />
 
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
 <p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
 
 <p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
 
@@ -898,16 +898,8 @@
           <article>
             <header>
               
-            </header>
-          </article>
-        </p>
-        
-        <p>
-          <article>
-            <header>
-              
                 <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
               
             </header>
           </article>
@@ -918,7 +910,15 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
               
             </header>
           </article>

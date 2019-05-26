@@ -1,0 +1,1134 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <script type="application/ld+json">
+    {
+        "@context" : "http://schema.org",
+        "@type" : "BlogPosting",
+        "mainEntityOfPage": {
+             "@type": "WebPage",
+             "@id": "https://andyyin.github.io"
+        },
+        "articleSection" : "blog",
+        "name" : "一次 Young GC 的优化实践（FinalReference 相关）",
+        "headline" : "一次 Young GC 的优化实践（FinalReference 相关）",
+        "description" : "前言 博客已经好久没有更新了，主要原因是 18 年下半年工作比较忙，另外也没有比较有意思的题材，所以迟迟没有更新。 此篇是 18 年底的微信上的某同学提供的一个 Young GC 问题案例，找我帮忙解决。这个 GC 案例比较有意思，虽然过去有一段时间了，但是想想觉得还是有必要写出来，应该对大家很有帮助。 排查问题有点像侦探断案，先分析各种可能性，再按照获得的一个个证据，去排除各种可能性、然后定位原因，最终解决问题。
+问题 有个同学在微信上问我，有没有办法排查 YoungGC 效率低的问题？听到这话，我也是不知从何说起，就让他说下具体情况。 具体情况是： 有个服务在没有 RPC 调用时，YoungGC 时间大约在 4-5ms，但是有 RPC 调用时，YoungGC 的耗时在 40ms 以上，几乎没有什么对象晋升，频率 4-5 秒一次。GC 日志截图如下。 后来他为了排查问题，把服务只留一个 RPC 调用，结果 YoungGC 更严重，变成 100ms 以上，几乎没有什么对象晋升，另外 RPC 调用耗时在 4-5ms，压测的 QPS 也比较低，只有几个线程在压。GC 日志截图如下。 另外还有一个奇葩的现象，如果测试时，只留一个调用耗时更长的 RPC 进行测试，发现 Young GC 耗时会小一点。 这里也提供下提供了下 GC 参数如下：
+//GC 参数 -Xmn700m -Xms3072m -Xmx3072m -XX:SurvivorRatio=8 -XX:MetaspaceSize=384m -XX:MaxMetaspaceSize=384m -XX:+UseConcMarkSweepGC -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=80 -XX:+UseCMSInitiatingOccupancyOnly -XX:+PrintGC -XX:+PrintGCDateStamps -XX:+PrintGCDetails  可以看到，整个堆 3072M，Young Gen只有 700M，都不大。",
+        "inLanguage" : "zh",
+        "author" : "",
+        "creator" : "",
+        "publisher": "",
+        "accountablePerson" : "",
+        "copyrightHolder" : "",
+        "copyrightYear" : "2019",
+        "datePublished": "2019-02-23 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2019-02-23 00:00:00 &#43;0000 UTC",
+        "url" : "https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/",
+        "wordCount" : "471",
+        "keywords" : [ "Java","JVM","GC","Young GC","优化","FinalReference","Blog" ]
+    }
+    </script>
+        
+            
+                <title>一次 Young GC 的优化实践（FinalReference 相关）</title>
+            
+        
+
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content="Hugo 0.54.0" />
+        
+
+
+        
+            <meta name="author" content="涤生">
+        
+        
+            
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+            
+        
+
+        <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="一次 Young GC 的优化实践（FinalReference 相关）"/>
+<meta name="twitter:description" content="前言 博客已经好久没有更新了，主要原因是 18 年下半年工作比较忙，另外也没有比较有意思的题材，所以迟迟没有更新。 此篇是 18 年底的微信上的某同学提供的一个 Young GC 问题案例，找我帮忙解决。这个 GC 案例比较有意思，虽然过去有一段时间了，但是想想觉得还是有必要写出来，应该对大家很有帮助。 排查问题有点像侦探断案，先分析各种可能性，再按照获得的一个个证据，去排除各种可能性、然后定位原因，最终解决问题。
+问题 有个同学在微信上问我，有没有办法排查 YoungGC 效率低的问题？听到这话，我也是不知从何说起，就让他说下具体情况。 具体情况是： 有个服务在没有 RPC 调用时，YoungGC 时间大约在 4-5ms，但是有 RPC 调用时，YoungGC 的耗时在 40ms 以上，几乎没有什么对象晋升，频率 4-5 秒一次。GC 日志截图如下。 后来他为了排查问题，把服务只留一个 RPC 调用，结果 YoungGC 更严重，变成 100ms 以上，几乎没有什么对象晋升，另外 RPC 调用耗时在 4-5ms，压测的 QPS 也比较低，只有几个线程在压。GC 日志截图如下。 另外还有一个奇葩的现象，如果测试时，只留一个调用耗时更长的 RPC 进行测试，发现 Young GC 耗时会小一点。 这里也提供下提供了下 GC 参数如下：
+//GC 参数 -Xmn700m -Xms3072m -Xmx3072m -XX:SurvivorRatio=8 -XX:MetaspaceSize=384m -XX:MaxMetaspaceSize=384m -XX:&#43;UseConcMarkSweepGC -XX:&#43;CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=80 -XX:&#43;UseCMSInitiatingOccupancyOnly -XX:&#43;PrintGC -XX:&#43;PrintGCDateStamps -XX:&#43;PrintGCDetails  可以看到，整个堆 3072M，Young Gen只有 700M，都不大。"/>
+
+        <meta property="og:title" content="一次 Young GC 的优化实践（FinalReference 相关）" />
+<meta property="og:description" content="前言 博客已经好久没有更新了，主要原因是 18 年下半年工作比较忙，另外也没有比较有意思的题材，所以迟迟没有更新。 此篇是 18 年底的微信上的某同学提供的一个 Young GC 问题案例，找我帮忙解决。这个 GC 案例比较有意思，虽然过去有一段时间了，但是想想觉得还是有必要写出来，应该对大家很有帮助。 排查问题有点像侦探断案，先分析各种可能性，再按照获得的一个个证据，去排除各种可能性、然后定位原因，最终解决问题。
+问题 有个同学在微信上问我，有没有办法排查 YoungGC 效率低的问题？听到这话，我也是不知从何说起，就让他说下具体情况。 具体情况是： 有个服务在没有 RPC 调用时，YoungGC 时间大约在 4-5ms，但是有 RPC 调用时，YoungGC 的耗时在 40ms 以上，几乎没有什么对象晋升，频率 4-5 秒一次。GC 日志截图如下。 后来他为了排查问题，把服务只留一个 RPC 调用，结果 YoungGC 更严重，变成 100ms 以上，几乎没有什么对象晋升，另外 RPC 调用耗时在 4-5ms，压测的 QPS 也比较低，只有几个线程在压。GC 日志截图如下。 另外还有一个奇葩的现象，如果测试时，只留一个调用耗时更长的 RPC 进行测试，发现 Young GC 耗时会小一点。 这里也提供下提供了下 GC 参数如下：
+//GC 参数 -Xmn700m -Xms3072m -Xmx3072m -XX:SurvivorRatio=8 -XX:MetaspaceSize=384m -XX:MaxMetaspaceSize=384m -XX:&#43;UseConcMarkSweepGC -XX:&#43;CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=80 -XX:&#43;UseCMSInitiatingOccupancyOnly -XX:&#43;PrintGC -XX:&#43;PrintGCDateStamps -XX:&#43;PrintGCDetails  可以看到，整个堆 3072M，Young Gen只有 700M，都不大。" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/" />
+<meta property="article:published_time" content="2019-02-23T00:00:00&#43;00:00"/>
+<meta property="article:modified_time" content="2019-02-23T00:00:00&#43;00:00"/>
+
+        <meta property="og:image" content="https://andyyin.github.io/images/logo.png">
+        <meta property="og:image:type" content="image/png">
+        <meta property="og:image:width" content="512">
+        <meta property="og:image:height" content="512">
+        
+<meta itemprop="name" content="一次 Young GC 的优化实践（FinalReference 相关）">
+<meta itemprop="description" content="前言 博客已经好久没有更新了，主要原因是 18 年下半年工作比较忙，另外也没有比较有意思的题材，所以迟迟没有更新。 此篇是 18 年底的微信上的某同学提供的一个 Young GC 问题案例，找我帮忙解决。这个 GC 案例比较有意思，虽然过去有一段时间了，但是想想觉得还是有必要写出来，应该对大家很有帮助。 排查问题有点像侦探断案，先分析各种可能性，再按照获得的一个个证据，去排除各种可能性、然后定位原因，最终解决问题。
+问题 有个同学在微信上问我，有没有办法排查 YoungGC 效率低的问题？听到这话，我也是不知从何说起，就让他说下具体情况。 具体情况是： 有个服务在没有 RPC 调用时，YoungGC 时间大约在 4-5ms，但是有 RPC 调用时，YoungGC 的耗时在 40ms 以上，几乎没有什么对象晋升，频率 4-5 秒一次。GC 日志截图如下。 后来他为了排查问题，把服务只留一个 RPC 调用，结果 YoungGC 更严重，变成 100ms 以上，几乎没有什么对象晋升，另外 RPC 调用耗时在 4-5ms，压测的 QPS 也比较低，只有几个线程在压。GC 日志截图如下。 另外还有一个奇葩的现象，如果测试时，只留一个调用耗时更长的 RPC 进行测试，发现 Young GC 耗时会小一点。 这里也提供下提供了下 GC 参数如下：
+//GC 参数 -Xmn700m -Xms3072m -Xmx3072m -XX:SurvivorRatio=8 -XX:MetaspaceSize=384m -XX:MaxMetaspaceSize=384m -XX:&#43;UseConcMarkSweepGC -XX:&#43;CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=80 -XX:&#43;UseCMSInitiatingOccupancyOnly -XX:&#43;PrintGC -XX:&#43;PrintGCDateStamps -XX:&#43;PrintGCDetails  可以看到，整个堆 3072M，Young Gen只有 700M，都不大。">
+
+
+<meta itemprop="datePublished" content="2019-02-23T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2019-02-23T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="471">
+
+
+
+<meta itemprop="keywords" content="Java,JVM,GC,Young GC,优化,FinalReference," />
+
+        
+
+        
+            
+        
+
+        
+        
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:400,800,900|Source+Sans+Pro:400,700">
+            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/main.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/add-on.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/academicons.min.css">
+        
+
+        
+            
+                
+            
+        
+
+
+  
+    
+    <link href='//cdn.bootcss.com/highlight.js/9.11.0/styles/github.min.css' rel='stylesheet' type='text/css' />
+  
+
+
+      
+    </head>
+    <body>
+
+      
+      <div id="wrapper">
+
+    
+    
+<header id="header">
+    
+      <h1><a href="https://andyyin.github.io/">涤生|个人博客</a></h1>
+    
+
+    <nav class="links">
+        <ul>
+            
+                <li>
+                    <a href="https://andyyin.github.io/">
+                            <i class="fa fa-home">&nbsp;</i>主页
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/blog/">
+                            <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/categories/">
+                            <i class="fa fa-sitemap">&nbsp;</i>分类
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/about/">
+                            <i class="fa fa-id-card-o">&nbsp;</i>关于
+                    </a>
+                </li>
+            
+        </ul>
+    </nav>
+    <nav class="main">
+        <ul>
+            
+            <li id="share-nav" class="share-menu" style="display:none;">
+                <a class="fa-share-alt" href="#share-menu">Share</a>
+            </li>
+            
+            <li class="search">
+                <a class="fa-search" href="#search">Search</a>
+                <form id="search" method="get" action="//google.com/search">
+                    <input type="text" name="q" placeholder="Search" />
+                    <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+                </form>
+            </li>
+            <li class="menu">
+                <a class="fa-bars" href="#menu">Menu</a>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+
+<section id="menu">
+
+    
+        <section>
+            <form class="search" method="get" action="//google.com/search">
+                <input type="text" name="q" placeholder="Search" />
+                <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+            </form>
+        </section>
+
+    
+        <section>
+            <ul class="links">
+                
+                    <li>
+                        <a href="https://andyyin.github.io/">
+                            <h3>
+                                <i class="fa fa-home">&nbsp;</i>主页
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/blog/">
+                            <h3>
+                                <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/categories/">
+                            <h3>
+                                <i class="fa fa-sitemap">&nbsp;</i>分类
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/about/">
+                            <h3>
+                                <i class="fa fa-id-card-o">&nbsp;</i>关于
+                            </h3>
+                        </a>
+                    </li>
+                
+            </ul>
+        </section>
+
+    
+        <section class="recent-posts">
+            <div class="mini-posts">
+                <header>
+                    <h3>Recent Posts</h3>
+                </header>
+                
+
+                
+                    
+                
+
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-19'>
+                                    May 19, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-09'>
+                                    May 9, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-21'>
+                                    April 21, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-15'>
+                                    April 15, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+
+                
+                    <a href=
+                        
+                            /blog/
+                        
+                        class="button">更多</a>
+                
+            </div>
+        </section>
+
+    
+        
+</section>
+
+    <section id="share-menu">
+    <section id="social-share-nav">
+        <ul class="links">
+            <header>
+                <h3>Share this post <i class="fa fa-smile-o"></i></h3>
+            </header>
+            
+
+
+
+<li>
+  <a href="//twitter.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25B8%2580%25E6%25AC%25A1-young-gc-%25E7%259A%2584%25E4%25BC%2598%25E5%258C%2596%25E5%25AE%259E%25E8%25B7%25B5finalreference-%25E7%259B%25B8%25E5%2585%25B3%2f&amp;text=%e4%b8%80%e6%ac%a1%20Young%20GC%20%e7%9a%84%e4%bc%98%e5%8c%96%e5%ae%9e%e8%b7%b5%ef%bc%88FinalReference%20%e7%9b%b8%e5%85%b3%ef%bc%89&amp;via=" target="_blank" class="share-btn twitter">
+    <i class="fa fa-twitter"></i>
+    <p>Twitter</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//plus.google.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25B8%2580%25E6%25AC%25A1-young-gc-%25E7%259A%2584%25E4%25BC%2598%25E5%258C%2596%25E5%25AE%259E%25E8%25B7%25B5finalreference-%25E7%259B%25B8%25E5%2585%25B3%2f" target="_blank" class="share-btn google-plus">
+    <i class="fa fa-google-plus"></i>
+    <p>Google+</p>
+  </a>
+</li>
+
+
+
+
+
+<li>
+  <a href="//www.facebook.com/sharer/sharer.php?u=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25B8%2580%25E6%25AC%25A1-young-gc-%25E7%259A%2584%25E4%25BC%2598%25E5%258C%2596%25E5%25AE%259E%25E8%25B7%25B5finalreference-%25E7%259B%25B8%25E5%2585%25B3%2f" target="_blank" class="share-btn facebook">
+    <i class="fa fa-facebook"></i>
+    <p>Facebook</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//reddit.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25B8%2580%25E6%25AC%25A1-young-gc-%25E7%259A%2584%25E4%25BC%2598%25E5%258C%2596%25E5%25AE%259E%25E8%25B7%25B5finalreference-%25E7%259B%25B8%25E5%2585%25B3%2f&amp;title=%e4%b8%80%e6%ac%a1%20Young%20GC%20%e7%9a%84%e4%bc%98%e5%8c%96%e5%ae%9e%e8%b7%b5%ef%bc%88FinalReference%20%e7%9b%b8%e5%85%b3%ef%bc%89" target="_blank" class="share-btn reddit">
+    <i class="fa fa-reddit-alien"></i>
+    <p>Reddit</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.linkedin.com/shareArticle?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25B8%2580%25E6%25AC%25A1-young-gc-%25E7%259A%2584%25E4%25BC%2598%25E5%258C%2596%25E5%25AE%259E%25E8%25B7%25B5finalreference-%25E7%259B%25B8%25E5%2585%25B3%2f&amp;title=%e4%b8%80%e6%ac%a1%20Young%20GC%20%e7%9a%84%e4%bc%98%e5%8c%96%e5%ae%9e%e8%b7%b5%ef%bc%88FinalReference%20%e7%9b%b8%e5%85%b3%ef%bc%89" target="_blank" class="share-btn linkedin">
+      <i class="fa fa-linkedin"></i>
+      <p>LinkedIn</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.stumbleupon.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25B8%2580%25E6%25AC%25A1-young-gc-%25E7%259A%2584%25E4%25BC%2598%25E5%258C%2596%25E5%25AE%259E%25E8%25B7%25B5finalreference-%25E7%259B%25B8%25E5%2585%25B3%2f&amp;title=%e4%b8%80%e6%ac%a1%20Young%20GC%20%e7%9a%84%e4%bc%98%e5%8c%96%e5%ae%9e%e8%b7%b5%ef%bc%88FinalReference%20%e7%9b%b8%e5%85%b3%ef%bc%89" target="_blank" class="share-btn stumbleupon">
+    <i class="fa fa-stumbleupon"></i>
+    <p>StumbleUpon</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.pinterest.com/pin/create/button/?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25B8%2580%25E6%25AC%25A1-young-gc-%25E7%259A%2584%25E4%25BC%2598%25E5%258C%2596%25E5%25AE%259E%25E8%25B7%25B5finalreference-%25E7%259B%25B8%25E5%2585%25B3%2f&amp;description=%e4%b8%80%e6%ac%a1%20Young%20GC%20%e7%9a%84%e4%bc%98%e5%8c%96%e5%ae%9e%e8%b7%b5%ef%bc%88FinalReference%20%e7%9b%b8%e5%85%b3%ef%bc%89" target="_blank" class="share-btn pinterest">
+    <i class="fa fa-pinterest-p"></i>
+    <p>Pinterest</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="mailto:?subject=Check out this post by %e6%b6%a4%e7%94%9f&amp;body=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25B8%2580%25E6%25AC%25A1-young-gc-%25E7%259A%2584%25E4%25BC%2598%25E5%258C%2596%25E5%25AE%259E%25E8%25B7%25B5finalreference-%25E7%259B%25B8%25E5%2585%25B3%2f" target="_blank" class="share-btn email">
+    <i class="fa fa-envelope"></i>
+    <p>Email</p>
+  </a>
+</li>
+
+
+        </ul>
+    </section>
+</section>
+
+    
+    <div id="main">
+        
+        
+        <article class="post">
+  <header>
+    <div class="title">
+        
+            <h1><a href="https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/">一次 Young GC 的优化实践（FinalReference 相关）</a></h1>
+            
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2019-02-23'>
+            2019-02-23</time>
+        <span class="author">涤生</span>
+        
+            <p>3 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+
+  
+
+  
+
+  <div id="content">
+    
+
+<h1 id="前言">前言</h1>
+
+<p>博客已经好久没有更新了，主要原因是 18 年下半年工作比较忙，另外也没有比较有意思的题材，所以迟迟没有更新。
+此篇是 18 年底的微信上的某同学提供的一个 Young GC 问题案例，找我帮忙解决。这个 GC 案例比较有意思，虽然过去有一段时间了，但是想想觉得还是有必要写出来，应该对大家很有帮助。
+排查问题有点像侦探断案，先分析各种可能性，再按照获得的一个个证据，去排除各种可能性、然后定位原因，最终解决问题。</p>
+
+<h1 id="问题">问题</h1>
+
+<p>有个同学在微信上问我，有没有办法排查 YoungGC 效率低的问题？听到这话，我也是不知从何说起，就让他说下具体情况。
+具体情况是：
+有个服务在没有 RPC 调用时，YoungGC 时间大约在 4-5ms，但是有 RPC 调用时，YoungGC 的耗时在 40ms 以上，几乎没有什么对象晋升，频率 4-5 秒一次。GC 日志截图如下。
+<img src="https://andyyin.github.io/img/2019/02/younggc/younggc40ms.jpg" alt="40+ms 耗时的 YoungGC 日志" /></p>
+
+<p>后来他为了排查问题，把服务只留一个 RPC 调用，结果 YoungGC 更严重，变成 100ms 以上，几乎没有什么对象晋升，另外 RPC 调用耗时在 4-5ms，压测的 QPS 也比较低，只有几个线程在压。GC 日志截图如下。
+<img src="https://andyyin.github.io/img/2019/02/younggc/younggc100ms.jpg" alt="100+ms 耗时的 YoungGC 日志" /></p>
+
+<p>另外还有一个奇葩的现象，如果测试时，只留一个调用耗时更长的 RPC 进行测试，发现 Young GC 耗时会小一点。
+这里也提供下提供了下 GC 参数如下：</p>
+
+<pre><code>//GC 参数
+-Xmn700m -Xms3072m -Xmx3072m -XX:SurvivorRatio=8 
+-XX:MetaspaceSize=384m -XX:MaxMetaspaceSize=384m -XX:+UseConcMarkSweepGC 
+-XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=80
+-XX:+UseCMSInitiatingOccupancyOnly -XX:+PrintGC -XX:+PrintGCDateStamps 
+-XX:+PrintGCDetails
+</code></pre>
+
+<p>可以看到，整个堆 3072M，Young Gen只有 700M，都不大。</p>
+
+<h1 id="疑惑">疑惑</h1>
+
+<p>从上述问题来看可以判断出：RPC 调用影响了 YoungGC 的时间。
+但是你一定有很多疑惑：</p>
+
+<ul>
+<li>为什么进行 RPC 调用和不进行 RPC 调用相比 YoungGC 耗时增加那么多？（Young Gen 的空间一直那么大，而且每次 GC 几乎没有对象晋升到 Old Gen）</li>
+<li>为什么 RPC 调用耗时长短也会影响 YoungGC 的耗时？</li>
+</ul>
+
+<h1 id="分析">分析</h1>
+
+<p>首先，大家都知道 Young GC 是全程 stop the world 的，时间可能有多方面原因决定：</p>
+
+<ul>
+<li>各个线程到达安全点的等待时间；</li>
+<li>从 GC Root 扫描对象，进行标记的时间；</li>
+<li>存活对象 Copy 到 Survivor 以及晋升 Old Gen 到的时间；</li>
+<li>GC 日志的时间；</li>
+</ul>
+
+<p>原因比较多，从表象上很难看出 YoungGC 耗时的原因，因此，我们需要收集更多的证据，来排除干扰选项，定位原因</p>
+
+<ul>
+<li>对于是否线程到达安全点时间引起的原因</li>
+</ul>
+
+<p>我们加上显示 Stop 时间与 Safepoint 的相关参数</p>
+
+<pre><code>//Stop时间与Safepoint的相关参数
+-XX:+PrintGCApplicationStoppedTime -XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsCount=1
+</code></pre>
+
+<p>结论也很明显，stopping threads took 的时间都很短，可以排除此项因素。
+<img src="https://andyyin.github.io/img/2019/02/younggc/safepointtime.jpg" alt="stopping threads took 耗时" /></p>
+
+<ul>
+<li>对于从 GC Root 扫描对象，进行标记的时间引起的原因</li>
+</ul>
+
+<p>我们加上显示 GC 处理 Reference 耗时的相关参数</p>
+
+<pre><code>// 打印参数
+-XX:+PrintReferenceGC
+</code></pre>
+
+<p>结论也很明显，YoungGC 总耗时 110ms， 而 reference 处理耗时较长，主要是 FinalReference，耗时有 86 ms。</p>
+
+<pre><code>//YoungGC 日志
+2019-01-02T17:42:53.926+0800: 409.638: [GC (Allocation Failure)
+2019-01-02T17:42:53.927+0800: 409.638: [ParNew2019-01-02T17:42:53.950+0800: 409.662: [SoftReference, 0 refs, 0.0000893 secs]
+2019-01-02T17:42:53.951+0800: 409.662: [WeakReference, 185 refs, 0.0000499 secs]
+2019-01-02T17:42:53.951+0800: 409.662: [FinalReference, 38820 refs, 0.0865010 secs]
+2019-01-02T17:42:54.037+0800: 409.749: [PhantomReference, 0 refs, 1 refs, 0.0000447 secs]
+2019-01-02T17:42:54.037+0800: 409.749: [JNI Weak Reference, 0.0000220 secs]: 645120K-&gt;37540K(645120K), 0.1126527 secs]
+1005305K-&gt;397726K(3074048K), 0.1128549 secs]
+[Times: user=0.40 sys=0.00, real=0.11 secs]
+</code></pre>
+
+<ul>
+<li>对于存活对象 Copy 到 Survivor 以及晋升 Old Gen 到的时间引起的原因</li>
+</ul>
+
+<p>由于 Survivor 较小，每次 YoungGC 又几乎没有晋升到 Old Gen 的对象，因此很明显，可以排除此项因素。</p>
+
+<ul>
+<li>对 GC 日志的时间</li>
+</ul>
+
+<p>大部分 GC 日志是不耗时的，除非机器使用了大量的 swap 空间，或者其他原因导致的 iowait 较高，此项可以通过 top 或者 dstat 等命令看看 swap 使用情况以及 iowait 指标。</p>
+
+<p>分析到这里，其实问题基本已经定位了，主要是 FinalReference 的处理时间比较长，导致 Young GC 时间比较长。</p>
+
+<h1 id="原理">原理</h1>
+
+<h2 id="finalreference-是什么">FinalReference 是什么？</h2>
+
+<p>FinalReference 的详细讲解，又需要一篇文章。
+这里简单描述下：
+对于重载了 Object 类的 finalize 方法的类实例化的对象（这里称为 f 对象），JVM 为了能在 GC 对象时触发 f 对象的 finalize 方法的调用，将每个 f 对象包装生成一个对应的FinalReference 对象，方便 GC 时进行处理。</p>
+
+<pre><code>//finalize方法
+protected void finalize() throws Throwable {
+    .... 
+}
+</code></pre>
+
+<p>FinalReference 详细解读，可以看下你假笨大神的这篇博客<a href="http://lovestblog.cn/blog/2015/07/09/final-reference/">JVM源码分析之FinalReference完全解读</a></p>
+
+<h2 id="finalreference-来源何处">FinalReference 来源何处？</h2>
+
+<p>FinalReference 对于没有实现 finalize 的程序，一般是不会出现的，到底是来源何处呢？
+这里进行 JVM dump，然后通过 MAT 工具分析
+<img src="https://andyyin.github.io/img/2019/02/younggc/dumpfinalizer.jpg" alt="JVM dump 的 Finalizer 相关对象" /></p>
+
+<p>很明显，是 SocksSocketImpl 对象，我们看下 SocksSocketImpl 类实现</p>
+
+<pre><code>//SocksSocketImpl finalize 的实现
+/**
+ * Cleans up if the user forgets to close it.
+ */
+protected void finalize() throws IOException {
+      close();
+}
+</code></pre>
+
+<p>这里是为了防止 Socket 连接忘记关闭导致资源泄漏而进行的保底措施。</p>
+
+<h2 id="为什么finalreference-gc-处理这么耗时">为什么FinalReference GC 处理这么耗时？</h2>
+
+<p>为什么 JVM GC 处理 FinalReference 这么耗时呢，通过 GC 日志，可以看出有 38820 个 reference，耗时 86ms。</p>
+
+<pre><code>2019-01-02T17:42:53.951+0800: 409.662: [FinalReference, 38820 refs, 0.0865010 secs]
+</code></pre>
+
+<p>对于这个问题撸过 JVM 源码，但是一直没有搞清楚，
+其实我的另一篇博客 <a href="https://andyyin.github.io/blog/phantomreference导致cms-gc耗时严重">PhantomReference 导致 CMS GC 耗时严重</a>，也是类似，reference 个数不多，但是 GC 处理非常耗时，影响系统性能呢。</p>
+
+<h2 id="如何解释问题的想象">如何解释问题的想象？</h2>
+
+<p>看到上面的 FinalReference 主要是 Socket 引起的，当时就推想到为什么会有这么多 Socket 对象需要 GC，所以问某同学难道你使用的是短连接？得到的回答是肯定的，瞬间豁然开朗。
+上文提到的两个疑惑就很容易解释了：</p>
+
+<ul>
+<li><p>对于“为什么进行 RPC 调用和不进行 RPC 调用相比 YoungGC 耗时增加那么多？”问题
+RPC 调用使用的是短连接，每调用一次就会创建一个 Socket 对象，致使 FinalReference 对象非常多， 因此，YoungGC 耗时增加。</p></li>
+
+<li><p>对于“为什么 RPC 调用耗时长短也会影响 YoungGC 的耗时？”问题
+由于 RPC 调用耗时长的，同样的线程数，调用的 QPS 就低，QPS 低自然创建的 Socket 对象就少，致使 FinalReference 对象少，因此，YoungGC 耗时相比就会小一些。</p></li>
+</ul>
+
+<h1 id="解决">解决</h1>
+
+<p>理解了问题产生的原理，解决问题自然变得非常简单。</p>
+
+<ul>
+<li><p>通用方法
+加上 ParallelRefProcEnabled 参数可以使得 Reference 在 GC 的时候多线程并行处理过程，自然耗时就会降下来。</p>
+
+<pre><code>//ParallelRefProcEnabled 参数
+-XX:+ParallelRefProcEnabled
+</code></pre></li>
+
+<li><p>减少 GC 的 Reference 数量
+减少 GC 的 Reference 方法比较多，不同案例不同处理，能减少 GC 的 Reference 数量就好。
+这里也很简单，RPC 调用短连接改用长链接，自然就能减少 GC 的 Reference 数量。
+该案例就使用了这个方案，效果也很明显，YoungGC 时间直接降低到了 14ms。</p></li>
+</ul>
+
+<h1 id="总结">总结</h1>
+
+<p>本案例总结原因就是 RPC 使用短连接调用，导致 Socket 的 FinalReference 引用较多，致使 YoungGC 耗时较长。因此，通过将短连接改成长连接，减少了 Socket 对象的创建，从而减少 FinalReference，来降低 YoungGC 耗时。
+在看本篇文章之前，你一定不会想到 JVM GC 处理  FinalReference 耗时这么长；你也一定不会想到短连接还有影响 GC 耗时的坏处。
+排查问题的过程，很享受，不仅可以证明所学，也可以锤炼技术。</p>
+
+<hr />
+
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
+<p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
+
+<p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
+
+  </div>
+
+  <footer>
+    <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/young-gc">Young GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E4%BC%98%E5%8C%96">优化</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/finalreference">FinalReference</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+
+</article>
+
+<ul class="actions pagination">
+    
+        <li><a href="https://andyyin.github.io/blog/phantomreference%E5%AF%BC%E8%87%B4cms-gc%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/"
+                class="button big previous">PhantomReference 导致 CMS GC 耗时严重</a></li>
+    
+
+    
+        <li><a href="https://andyyin.github.io/blog/%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/"
+                class="button big next">一个 JVM 参数引发的频繁 CMS GC</a></li>
+    
+</ul>
+
+
+    </div>
+    
+<section id="sidebar">
+
+  
+  <section id="intro">
+    
+    
+      
+        <a href='https://andyyin.github.io/'><img src="https://andyyin.github.io/img/main/disheng.jpg" class="intro-circle" width="100" alt="涤生的博客" /></a>
+      
+    
+    
+      <header>
+        <h2>涤生的博客</h2>
+        <p>主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      </header>
+    
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+  </section>
+
+  
+  <section class="recent-posts">
+    <div class="mini-posts">
+      <header>
+        <h3>最新文章</h3>
+      </header>
+      <div class="posts-container">
+        
+
+        
+          
+        
+
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-19'>
+                2019-05-19
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-09'>
+                2019-05-09
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-21'>
+                2019-04-21
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-15'>
+                2019-04-15
+              </time>
+            </header>
+            
+
+          </article>
+        
+      </div>
+
+      
+        <a href=
+          
+            /blog/
+          
+        class="button">更多</a>
+      
+    </div>
+  </section>
+
+  
+  
+  
+  
+  
+    <section id="categories">
+      <header>
+        <h3>
+          <a href="https://andyyin.github.io/categories/">分类</a>
+        </h3>
+      </header>
+        
+          
+        
+
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/zookeeper/">Zookeeper</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+    </section>
+  
+  
+
+  
+  
+    <section id="mini-bio">
+      <h3>关于我</h3>
+      <p>涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      <a href="https://andyyin.github.io/about/" class="button">了解更多</a>
+    </section>
+  
+
+  
+  <section id="footer">
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+    <p class="copyright">
+      
+        &copy; 2019
+        
+          涤生的博客
+        
+      .
+      Powered by <a href="https://andyyin.github.io/" target="_blank">涤生</a>
+    </p>
+  </section>
+</section>
+
+    </div>
+    <a id="back-to-top" href="#" class="fa fa-arrow-up fa-border fa-2x"></a>
+    
+
+    
+      
+    
+
+    
+      
+      
+      
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/highlight.min.js"></script>
+        
+        
+        
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/r.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/yaml.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/css.min.js"></script>
+        <script>hljs.configure({languages: []}); hljs.initHighlightingOnLoad();</script>
+      
+    
+    
+    
+      <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/skel/3.0.1/skel.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.js"></script>
+      <script src="https://andyyin.github.io/js/util.js"></script>
+      <script src="https://andyyin.github.io/js/main.js"></script>
+      <script src="https://andyyin.github.io/js/backToTop.js"></script>
+    
+
+    
+      
+        
+      
+    
+
+    
+    <script>hljs.initHighlightingOnLoad();</script>
+      <script src="//yihui.name/js/math-code.js"></script>
+<script async
+src="//cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+  </body>
+</html>
+

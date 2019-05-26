@@ -30,7 +30,7 @@
         "datePublished": "2019-04-10 00:00:00 &#43;0000 UTC",
         "dateModified" : "2019-04-10 00:00:00 &#43;0000 UTC",
         "url" : "https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/",
-        "wordCount" : "1300",
+        "wordCount" : "1302",
         "keywords" : [ "Java","JVM","GC","CMS GC","优化","Blog" ]
     }
     </script>
@@ -95,7 +95,7 @@
 
 <meta itemprop="datePublished" content="2019-04-10T00:00:00&#43;00:00" />
 <meta itemprop="dateModified" content="2019-04-10T00:00:00&#43;00:00" />
-<meta itemprop="wordCount" content="1300">
+<meta itemprop="wordCount" content="1302">
 
 
 
@@ -624,9 +624,8 @@ Heap after GC invocations=18478 (full 731):
 主要有两个条件：</p>
 
 <ul>
-<li><p>-XX:+CMSScavengeBeforeRemark 参数引起的 “promotion failed”  的 Young GC，致使 to space 不为空；</p></li>
-
-<li><p>长时间没有 Allocation Failure 引起的 Young GC。</p></li>
+<li>-XX:+CMSScavengeBeforeRemark 参数引起的 “promotion failed”  的 Young GC，致使 to space 不为空；</li>
+<li>长时间没有 Allocation Failure 引起的 Young GC。</li>
 </ul>
 
 <p>了解了这两个条件，就能解释为什么一般业务配置了这个参数，但是没有出现过类似频繁 CMS GC 的情况。
@@ -636,9 +635,8 @@ Heap after GC invocations=18478 (full 731):
 <p>文章中的案例，就是符合两个条件，进而导致频繁 CMS GC。</p>
 
 <ul>
-<li><p>晋升对象比较大，很容易导致 “-XX:+CMSScavengeBeforeRemark 参数引起的 “promotion failed”  的 Young GC” 这种情况；</p></li>
-
-<li><p>长时间才会出现一次 Young GC， 又满足了 “长时间没有 Allocation Failure 引起的 Young GC” 条件。</p></li>
+<li>晋升对象比较大，很容易导致 “-XX:+CMSScavengeBeforeRemark 参数引起的 “promotion failed”  的 Young GC” 这种情况；</li>
+<li>长时间才会出现一次 Young GC， 又满足了 “长时间没有 Allocation Failure 引起的 Young GC” 条件。</li>
 </ul>
 
 <h2 id="有哪些优化策略">有哪些优化策略</h2>
@@ -660,7 +658,13 @@ CMS GC 过程中不强制触发 Young GC，自然降低了 “promotion failed�
 
 <hr />
 
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
 <p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
 
 <p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
 
@@ -946,16 +950,8 @@ CMS GC 过程中不强制触发 Young GC，自然降低了 “promotion failed�
           <article>
             <header>
               
-            </header>
-          </article>
-        </p>
-        
-        <p>
-          <article>
-            <header>
-              
                 <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
               
             </header>
           </article>
@@ -966,7 +962,15 @@ CMS GC 过程中不强制触发 Young GC，自然降低了 “promotion failed�
             <header>
               
                 <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
               
             </header>
           </article>

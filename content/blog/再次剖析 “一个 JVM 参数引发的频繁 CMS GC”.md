@@ -176,7 +176,6 @@ Heap after GC invocations=18478 (full 731):
 主要有两个条件：
 
 * -XX:+CMSScavengeBeforeRemark 参数引起的 “promotion failed”  的 Young GC，致使 to space 不为空；
-
 * 长时间没有 Allocation Failure 引起的 Young GC。
 
 了解了这两个条件，就能解释为什么一般业务配置了这个参数，但是没有出现过类似频繁 CMS GC 的情况。
@@ -186,7 +185,6 @@ Heap after GC invocations=18478 (full 731):
 文章中的案例，就是符合两个条件，进而导致频繁 CMS GC。
 
 * 晋升对象比较大，很容易导致 “-XX:+CMSScavengeBeforeRemark 参数引起的 “promotion failed”  的 Young GC” 这种情况；
-
 * 长时间才会出现一次 Young GC， 又满足了 “长时间没有 Allocation Failure 引起的 Young GC” 条件。
 
 ## 有哪些优化策略
@@ -205,6 +203,10 @@ CMS GC 过程中不强制触发 Young GC，自然降低了 “promotion failed�
 
 
 ******
-欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。
+> 涤生的博客。
+
+> 转载请注明原创出处，谢谢！
+
+> 欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。
 
 ![涤生-微信公共号](/img/main/officialAccount.jpg)

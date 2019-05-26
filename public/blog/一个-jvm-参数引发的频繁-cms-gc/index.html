@@ -27,7 +27,7 @@
         "datePublished": "2019-04-03 00:00:00 &#43;0000 UTC",
         "dateModified" : "2019-04-03 00:00:00 &#43;0000 UTC",
         "url" : "https://andyyin.github.io/blog/%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/",
-        "wordCount" : "3204",
+        "wordCount" : "3208",
         "keywords" : [ "Java","JVM","GC","CMS GC","优化","Blog" ]
     }
     </script>
@@ -83,7 +83,7 @@
 
 <meta itemprop="datePublished" content="2019-04-03T00:00:00&#43;00:00" />
 <meta itemprop="dateModified" content="2019-04-03T00:00:00&#43;00:00" />
-<meta itemprop="wordCount" content="3204">
+<meta itemprop="wordCount" content="3208">
 
 
 
@@ -567,27 +567,24 @@ Heap after GC invocations=18478 (full 731):
 <p>看第一次 CMS GC 日志，有以下四个发现：</p>
 
 <ol>
-<li><p>由日志 “CMS-initial-mark: 2935428K(3354624K)”可知，第一次 CMS GC 是因为 2935428 / 3354624 = 87.5% &gt; 80%，与此前监控图分析一致。</p></li>
-
-<li><p>由日志 “2019-03-28T20:05:22.211+0800: 3644474.678: [CMS-concurrent-reset: 0.007/0.007 secs]” 可知，第一次 CMS GC 完成具体时间是 20:05:22.211。</p></li>
-
-<li><p>由日志 “[GC (Allocation Failure) 3644462.647: [ParNew: 1887488K-&gt;201195K(1887488K), 0.4228807 secs]” 和日志 “[GC (CMS Final Remark) 3644463.375: [ParNew (promotion failed): 434406K-&gt;315478K(1887488K), 5.8407801 secs]”可知，第一次 CMS GC 日志中包含两次 Young GC，并且第一次 YoungGC 是由于 Allocation Failure，而第二次是因为什么呢，其实是因为配置了-XX:+CMSScavengeBeforeRemark 参数，因此在 CMS-remark 阶段前进行了一次 YoungGC。</p></li>
-
-<li><p>除了以上的信息，还有个奇怪的现象是，Young GC 后 eden、from、to 三个 space 的使用量都不是 0 使用的情况，正常情况 Young GC 后 eden 和 to space 的使用量应该是 0。
-这里其实不奇怪，通过日志 “concurrent mark-sweep generation total 3354624K, used 3171231K” 可知，OldGen 所剩无几，而且还可能存在碎片，这会导致 Young GC 晋升的对象，无处安放，导致 Young GC 回收停止了。</p>
-
-<pre><code>2019-03-28T20:05:10.907+0800: 3644463.375: [GC (CMS Final Remark) 3644463.375: [ParNew (promotion failed): 434406K-&gt;315478K(1887488K), 5.8407801 secs] 3512406K-&gt;3486710K(5242112K), 5.8410096 secs] [Times: user=6.84 sys=1.31, real=5.84 secs]
-Heap after GC invocations=18478 (full 731):
-par new generation   total 1887488K, used 315478K [0x0000000673400000, 0x00000006f3400000, 0x00000006f3400000)
-eden space 1677824K,  13% used [0x0000000673400000, 0x00000006817bed10, 0x00000006d9a80000)
-from space 209664K,  39% used [0x00000006e6740000, 0x00000006eb796e60, 0x00000006f3400000)
-to   space 209664K,  95% used [0x00000006d9a80000, 0x00000006e5efae68, 0x00000006e6740000)
-concurrent mark-sweep generation total 3354624K, used 3171231K [0x00000006f3400000, 0x00000007c0000000, 0x00000007c0000000)
-Metaspace       used 90225K, capacity 91504K, committed 91776K, reserved 1130496K
-class space    used 9517K, capacity 9806K, committed 9856K, reserved 1048576K
-}
-</code></pre></li>
+<li>由日志 “CMS-initial-mark: 2935428K(3354624K)”可知，第一次 CMS GC 是因为 2935428 / 3354624 = 87.5% &gt; 80%，与此前监控图分析一致。</li>
+<li>由日志 “2019-03-28T20:05:22.211+0800: 3644474.678: [CMS-concurrent-reset: 0.007/0.007 secs]” 可知，第一次 CMS GC 完成具体时间是 20:05:22.211。</li>
+<li>由日志 “[GC (Allocation Failure) 3644462.647: [ParNew: 1887488K-&gt;201195K(1887488K), 0.4228807 secs]” 和日志 “[GC (CMS Final Remark) 3644463.375: [ParNew (promotion failed): 434406K-&gt;315478K(1887488K), 5.8407801 secs]”可知，第一次 CMS GC 日志中包含两次 Young GC，并且第一次 YoungGC 是由于 Allocation Failure，而第二次是因为什么呢，其实是因为配置了-XX:+CMSScavengeBeforeRemark 参数，因此在 CMS-remark 阶段前进行了一次 YoungGC。</li>
+<li>除了以上的信息，还有个奇怪的现象是，Young GC 后 eden、from、to 三个 space 的使用量都不是 0 使用的情况，正常情况 Young GC 后 eden 和 to space 的使用量应该是 0。
+这里其实不奇怪，通过日志 “concurrent mark-sweep generation total 3354624K, used 3171231K” 可知，OldGen 所剩无几，而且还可能存在碎片，这会导致 Young GC 晋升的对象，无处安放，导致 Young GC 回收停止了。</li>
 </ol>
+
+<pre><code> 2019-03-28T20:05:10.907+0800: 3644463.375: [GC (CMS Final Remark) 3644463.375: [ParNew (promotion failed): 434406K-&gt;315478K(1887488K), 5.8407801 secs] 3512406K-&gt;3486710K(5242112K), 5.8410096 secs] [Times: user=6.84 sys=1.31, real=5.84 secs]
+Heap after GC invocations=18478 (full 731):
+ par new generation   total 1887488K, used 315478K [0x0000000673400000, 0x00000006f3400000, 0x00000006f3400000)
+  eden space 1677824K,  13% used [0x0000000673400000, 0x00000006817bed10, 0x00000006d9a80000)
+  from space 209664K,  39% used [0x00000006e6740000, 0x00000006eb796e60, 0x00000006f3400000)
+  to   space 209664K,  95% used [0x00000006d9a80000, 0x00000006e5efae68, 0x00000006e6740000)
+ concurrent mark-sweep generation total 3354624K, used 3171231K [0x00000006f3400000, 0x00000007c0000000, 0x00000007c0000000)
+ Metaspace       used 90225K, capacity 91504K, committed 91776K, reserved 1130496K
+  class space    used 9517K, capacity 9806K, committed 9856K, reserved 1048576K
+}
+</code></pre>
 
 <h3 id="第二次-cms-gc-日志">第二次 CMS GC 日志</h3>
 
@@ -643,16 +640,16 @@ Heap after GC invocations=18479 (full 732):
 <p>看第二次 CMS GC 日志，有以下四个发现：</p>
 
 <ol>
-<li><p>由日志 “CMS-initial-mark: 899032K(3354624K)” 可知，其实第一次 CMS GC 是已经回收了 OldGen，而且释放了大量空间，OldGen 的使用占比只有 899032 / 3354624 = 26.8%，很奇怪为什么会进行 CMS GC？</p></li>
+<li>由日志 “CMS-initial-mark: 899032K(3354624K)” 可知，其实第一次 CMS GC 是已经回收了 OldGen，而且释放了大量空间，OldGen 的使用占比只有 899032 / 3354624 = 26.8%，很奇怪为什么会进行 CMS GC？</li>
+<li>由日志 “2019-03-28T20:05:24.213+0800: 3644476.680: [GC (CMS Initial Mark)” 可知，第二次 CMS GC 开始的具体时间是 20:05:24.213，上次 CMS GC 结束时间 20:05:22.211 相差 2s。</li>
+<li>由日志 “[GC (CMS Final Remark) 3644477.934: [ParNew: 649871K-&gt;649871K(1887488K), 0.0000289 secs]” 可知，第二次 CMS GC 日志中包含一次 Young GC，毫无疑问是因为配置了-XX:+CMSScavengeBeforeRemark 参数导致的。</li>
+<li>Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况依然存在，只是 eden space 由使用比率 13% 增加到 33%。</li>
+</ol>
 
-<li><p>由日志 “2019-03-28T20:05:24.213+0800: 3644476.680: [GC (CMS Initial Mark)” 可知，第二次 CMS GC 开始的具体时间是 20:05:24.213，上次 CMS GC 结束时间 20:05:22.211 相差 2s。</p></li>
+<p>很奇怪，此时通过日志 “concurrent mark-sweep generation total 3354624K, used 899032K” 可知，OldGen 空闲空间很大，为什么 Young GC 好像没起作用。</p>
 
-<li><p>由日志 “[GC (CMS Final Remark) 3644477.934: [ParNew: 649871K-&gt;649871K(1887488K), 0.0000289 secs]” 可知，第二次 CMS GC 日志中包含一次 Young GC，毫无疑问是因为配置了-XX:+CMSScavengeBeforeRemark 参数导致的。</p></li>
-
-<li><p>Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况依然存在，只是 eden space 由使用比率 13% 增加到 33%。
-很奇怪，此时通过日志 “concurrent mark-sweep generation total 3354624K, used 899032K” 可知，OldGen 空闲空间很大，为什么 Young GC 好像没起作用。</p>
-
-<pre><code>Heap after GC invocations=18479 (full 732):
+<pre><code>```
+Heap after GC invocations=18479 (full 732):
  par new generation   total 1887488K, used 649871K [0x0000000673400000, 0x00000006f3400000, 0x00000006f3400000)
   eden space 1677824K,  33% used [0x0000000673400000, 0x0000000695e4cfa0, 0x00000006d9a80000)
   from space 209664K,  39% used [0x00000006e6740000, 0x00000006eb796e60, 0x00000006f3400000)
@@ -661,8 +658,8 @@ Heap after GC invocations=18479 (full 732):
  Metaspace       used 90199K, capacity 91456K, committed 91776K, reserved 1130496K
   class space    used 9512K, capacity 9798K, committed 9856K, reserved 1048576K
 }
-</code></pre></li>
-</ol>
+```
+</code></pre>
 
 <h3 id="第三次-第-n-次-cms-gc-日志">第三次-第 N 次 CMS GC 日志</h3>
 
@@ -676,13 +673,10 @@ Heap after GC invocations=18479 (full 732):
 <p>看第三次-第 N 次 CMS GC 日志，有三个发现：</p>
 
 <ol>
-<li><p>由日志 “CMS-initial-mark: 573449K(3354624K)” 可知，OldGen 的使用占比只有 573449 / 3354624= 17.1%，很奇怪为什么会进行 CMS GC？</p></li>
-
-<li><p>由日志 “2019-03-28T20:05:34.478+0800: 3644486.945: [GC (CMS Initial Mark)” 可知，第三次 CMS GC 的开始时间 20:05:34.478 与 第二次 CMS GC 结束时间 20:05:32.476 又相差 2s。</p></li>
-
-<li><p>由于配置了 -XX:+CMSScavengeBeforeRemark 参数，CMS GC 过程中依然包含一次 Young GC。</p></li>
-
-<li><p>Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况依然存在，只是 eden space 由使用比率增长。</p></li>
+<li>由日志 “CMS-initial-mark: 573449K(3354624K)” 可知，OldGen 的使用占比只有 573449 / 3354624= 17.1%，很奇怪为什么会进行 CMS GC？</li>
+<li>由日志 “2019-03-28T20:05:34.478+0800: 3644486.945: [GC (CMS Initial Mark)” 可知，第三次 CMS GC 的开始时间 20:05:34.478 与 第二次 CMS GC 结束时间 20:05:32.476 又相差 2s。</li>
+<li>由于配置了 -XX:+CMSScavengeBeforeRemark 参数，CMS GC 过程中依然包含一次 Young GC。</li>
+<li>Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况依然存在，只是 eden space 由使用比率增长。</li>
 </ol>
 
 <p>很奇怪，OldGen 空闲空间很大，为什么 Young GC 好像没起作用？</p>
@@ -692,13 +686,13 @@ Heap after GC invocations=18479 (full 732):
 <p>通过日志分析，，大家很容易发现三个问题：</p>
 
 <ul>
-<li><p>每次 CMS GC 都是相隔 2s？
-这其实是 CMS background collector 的策略，每隔 CMSWaitDuration（默认为2000ms） 时间进行一次检测，若发现满足 CMS GC 触发条件，就进行一次 CMS background collector。</p></li>
+<li>每次 CMS GC 都是相隔 2s？
+这其实是 CMS background collector 的策略，每隔 CMSWaitDuration（默认为2000ms） 时间进行一次检测，若发现满足 CMS GC 触发条件，就进行一次 CMS background collector。</li>
+<li>第二次及后面的 CMS GC，OldGen 的使用占比情况都没有达到 80%，很疑惑是什么导致了 CMS GC？
+通过上面的分析，其实只要知道是什么满足了 CMS GC 触发条件而导致了 CMS GC，就能回答第二个问题。</li>
+<li>Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况，而且 OldGen 空闲空间很大，为什么 Young GC 好像没起作用。
 
-<li><p>第二次及后面的 CMS GC，OldGen 的使用占比情况都没有达到 80%，很疑惑是什么导致了 CMS GC？
-通过上面的分析，其实只要知道是什么满足了 CMS GC 触发条件而导致了 CMS GC，就能回答第二个问题。</p></li>
-
-<li><p>Young GC 后 eden、from、to 三个 space 的使用量都不是 0 的情况，而且 OldGen 空闲空间很大，为什么 Young GC 好像没起作用。</p></li>
+<br /></li>
 </ul>
 
 <h3 id="源码排查">源码排查</h3>
@@ -708,23 +702,18 @@ Heap after GC invocations=18479 (full 732):
 <p>下面我们来看下 CMS GC 触发条件，触发条件都在 shouldConcurrentCollect 函数里，返回 true 的都是可能的情况，这里分别解释下。</p>
 
 <ul>
-<li><p>“if (_full_gc_requested)”
-这是由 System.gc() 调用且配置了 -XX:+ExplicitGCInvokesConcurrent 参数的情况下，会触发一次 CMS GC。但如果是 System.gc()，每次 CMS GC 的间隔时间不可能一直是 2s，故显然不符合。</p></li>
-
-<li><p>“if (!UseCMSInitiatingOccupancyOnly)”
-这是在没有配置 -XX:+UseCMSInitiatingOccupancyOnly 参数的情况下，可能触发 CMS GC 的情况，故显然不符合。</p></li>
-
-<li><p>“if (_cmsGen-&gt;should_concurrent_collect())”
-这是 -XX:+UseCMSInitiatingOccupancyOnly 参数的情况下，如果 OldGen 使用占比达到 -XX:CMSInitiatingOccupancyFraction 参数设置值，就会触发 CMS GC，但第二次、第三-第 N 次明显不符合情况。</p></li>
-
-<li><p>“if (gch-&gt;incremental_collection_will_fail(true /* consult_young */))”
-这是一种悲观策略，判断新生代回收是否会失败，如果最近一次 Young GC 已经失败或者可能会失败，就会触发一次 CMS GC。这是符合本文说的情况的。</p></li>
-
-<li><p>“if (MetaspaceGC::should_concurrent_collect())”
-这是 Metaspace 满足 CMS GC 触发条件的情况，根据日志 “ Metaspace       used 90199K, capacity 91456K, committed 91776K, reserved 1130496K” 中 Metaspace 空间使用情况，显然不符合。</p></li>
-
-<li><p>“if (CMSTriggerInterval &gt;= 0)”
-这是配置了 -XX:CMSTriggerInterval 参数的情况，显然不符合。</p></li>
+<li>“if (_full_gc_requested)”
+这是由 System.gc() 调用且配置了 -XX:+ExplicitGCInvokesConcurrent 参数的情况下，会触发一次 CMS GC。但如果是 System.gc()，每次 CMS GC 的间隔时间不可能一直是 2s，故显然不符合。</li>
+<li>“if (!UseCMSInitiatingOccupancyOnly)”
+这是在没有配置 -XX:+UseCMSInitiatingOccupancyOnly 参数的情况下，可能触发 CMS GC 的情况，故显然不符合。</li>
+<li>“if (_cmsGen-&gt;should_concurrent_collect())”
+这是 -XX:+UseCMSInitiatingOccupancyOnly 参数的情况下，如果 OldGen 使用占比达到 -XX:CMSInitiatingOccupancyFraction 参数设置值，就会触发 CMS GC，但第二次、第三-第 N 次明显不符合情况。</li>
+<li>“if (gch-&gt;incremental_collection_will_fail(true /* consult_young */))”
+这是一种悲观策略，判断新生代回收是否会失败，如果最近一次 Young GC 已经失败或者可能会失败，就会触发一次 CMS GC。这是符合本文说的情况的。</li>
+<li>“if (MetaspaceGC::should_concurrent_collect())”
+这是 Metaspace 满足 CMS GC 触发条件的情况，根据日志 “ Metaspace       used 90199K, capacity 91456K, committed 91776K, reserved 1130496K” 中 Metaspace 空间使用情况，显然不符合。</li>
+<li>“if (CMSTriggerInterval &gt;= 0)”
+这是配置了 -XX:CMSTriggerInterval 参数的情况，显然不符合。</li>
 </ul>
 
 <pre><code>bool CMSCollector::shouldConcurrentCollect() {
@@ -994,14 +983,19 @@ concurrent mark-sweep generation total 3354624K, used 554147K [0x00000006f340000
 <p>一时也没有想到很好的办法，两个参考方案：</p>
 
 <ul>
-<li><p>去掉 -XX:CMSScavengeBeforeRemark 参数</p></li>
-
-<li><p>降低 YoungGen 大小，加快因 Allocation Failure 而触发正常 Young GC</p></li>
+<li>去掉 -XX:CMSScavengeBeforeRemark 参数</li>
+<li>降低 YoungGen 大小，加快因 Allocation Failure 而触发正常 Young GC</li>
 </ul>
 
 <hr />
 
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
 <p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
 
 <p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
 
@@ -1059,6 +1053,9 @@ concurrent mark-sweep generation total 3354624K, used 554147K [0x00000006f340000
 </article>
 
 <ul class="actions pagination">
+    
+        <li><a href="https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/"
+                class="button big previous">一次 Young GC 的优化实践（FinalReference 相关）</a></li>
     
 
     
@@ -1284,16 +1281,8 @@ concurrent mark-sweep generation total 3354624K, used 554147K [0x00000006f340000
           <article>
             <header>
               
-            </header>
-          </article>
-        </p>
-        
-        <p>
-          <article>
-            <header>
-              
                 <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
               
             </header>
           </article>
@@ -1304,7 +1293,15 @@ concurrent mark-sweep generation total 3354624K, used 554147K [0x00000006f340000
             <header>
               
                 <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">4</span>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
               
             </header>
           </article>

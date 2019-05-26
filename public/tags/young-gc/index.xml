@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Young GC on 涤生的博客</title>
+    <link>https://andyyin.github.io/tags/young-gc/</link>
+    <description>Recent content in Young GC on 涤生的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh</language>
+    <lastBuildDate>Sat, 23 Feb 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://andyyin.github.io/tags/young-gc/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>一次 Young GC 的优化实践（FinalReference 相关）</title>
+      <link>https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/</link>
+      <pubDate>Sat, 23 Feb 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/</guid>
+      <description>前言 博客已经好久没有更新了，主要原因是 18 年下半年工作比较忙，另外也没有比较有意思的题材，所以迟迟没有更新。 此篇是 18 年底的微信上的某同学提供的一个 Young GC 问题案例，找我帮忙解决。这个 GC 案例比较有意思，虽然过去有一段时间了，但是想想觉得还是有必要写出来，应该对大家很有帮助。 排查问题有点像侦探断案，先分析各种可能性，再按照获得的一个个证据，去排除各种可能性、然后定位原因，最终解决问题。
+问题 有个同学在微信上问我，有没有办法排查 YoungGC 效率低的问题？听到这话，我也是不知从何说起，就让他说下具体情况。 具体情况是： 有个服务在没有 RPC 调用时，YoungGC 时间大约在 4-5ms，但是有 RPC 调用时，YoungGC 的耗时在 40ms 以上，几乎没有什么对象晋升，频率 4-5 秒一次。GC 日志截图如下。 后来他为了排查问题，把服务只留一个 RPC 调用，结果 YoungGC 更严重，变成 100ms 以上，几乎没有什么对象晋升，另外 RPC 调用耗时在 4-5ms，压测的 QPS 也比较低，只有几个线程在压。GC 日志截图如下。 另外还有一个奇葩的现象，如果测试时，只留一个调用耗时更长的 RPC 进行测试，发现 Young GC 耗时会小一点。 这里也提供下提供了下 GC 参数如下：
+//GC 参数 -Xmn700m -Xms3072m -Xmx3072m -XX:SurvivorRatio=8 -XX:MetaspaceSize=384m -XX:MaxMetaspaceSize=384m -XX:+UseConcMarkSweepGC -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=80 -XX:+UseCMSInitiatingOccupancyOnly -XX:+PrintGC -XX:+PrintGCDateStamps -XX:+PrintGCDetails  可以看到，整个堆 3072M，Young Gen只有 700M，都不大。</description>
+    </item>
+    
+    <item>
+      <title>PhantomReference 导致 CMS GC 耗时严重</title>
+      <link>https://andyyin.github.io/blog/phantomreference%E5%AF%BC%E8%87%B4cms-gc%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/</link>
+      <pubDate>Fri, 02 Feb 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/phantomreference%E5%AF%BC%E8%87%B4cms-gc%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/</guid>
+      <description>介绍 GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。
+现象 上图很明显（公司内部监控没有区分 Old GC 和 Full GC）Old GC 耗时严重，大致看了几天的监控，基本上每次都很耗时，时间约 1s 左右，这里统计的 1s 左右的耗时指的是 stop-the-world 的时间。
+排查 那到底哪里耗时呢？我们得去看看 GC 日志，日志中有更多的信息
+2018-01-13T19:21:36.254: [GC [1 CMS-initial-mark: 2097444K(4194304K)] 2143492K(6081792K), 0.2197240 secs] [Times: user=0.01 sys=0.17, real=0.22 secs] 2018-01-13T19:21:36.474: [CMS-concurrent-mark-start] 2018-01-13T19:21:36.654: [CMS-concurrent-mark: 0.180/0.180 secs] [Times: user=0.65 sys=0.07, real=0.18 secs] 2018-01-13T19:21:36.654: [CMS-concurrent-preclean-start] 2018-01-13T19:21:36.700: [CMS-concurrent-preclean: 0.045/0.045 secs] [Times: user=0.05 sys=0.01, real=0.04 secs] 2018-01-13T19:21:36.700: [CMS-concurrent-abortable-preclean-start] CMS: abort preclean due to time 2018-01-13T19:21:41.</description>
+    </item>
+    
+  </channel>
+</rss>

@@ -24,9 +24,7 @@ Zookeeper 我想大家都不陌生，在很多场合都听到它的名字。它�
 下图是 Zookeeper 的架构图，ZooKeeper 集群中包含 Leader、Follower 以及 Observer 三个角色：
 
 * Leader：负责进行投票的发起和决议，更新系统状态，Leader 是由选举产生;
-
 * Follower： 用于接受客户端请求并向客户端返回结果，在选主过程中参与投票;
-
 * Observer：可以接受客户端连接，接受读写请求，写请求转发给 Leader，但 Observer 不参加投票过程，只同步 Leader 的状态，Observer 的目的是为了扩展系统，提高读取速度。
 
 Client 是 Zookeeper 的客户端，请求发起方。
@@ -106,6 +104,10 @@ Observer 能很好的对 Zookeeper 集群进行扩展，Observer 可以提供 Cl
 Zookeeper 的高可用在部署上也是有很多考量的，Zookeeper 集群在部署上可以做到机房容灾，但是做不到异地容灾。另外，为了提升集群的扩展性和稳定性，可以引入 Observer 节点，提升读性能，保护 Leader 与 Follower 节点。
 
 ******
-欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。
+> 涤生的博客。
+
+> 转载请注明原创出处，谢谢！
+
+> 欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。
 
 ![涤生-微信公共号](/img/main/officialAccount.jpg)
