@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes" ?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>关于 on 涤生的博客</title>
-    <link>https://andyyin.github.io/about/</link>
-    <description>Recent content in 关于 on 涤生的博客</description>
+    <title>友情连接 on 涤生的博客</title>
+    <link>https://andyyin.github.io/links/</link>
+    <description>Recent content in 友情连接 on 涤生的博客</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>zh</language>
     <lastBuildDate>Tue, 09 Apr 2019 00:00:00 +0000</lastBuildDate>
     
-	<atom:link href="https://andyyin.github.io/about/index.xml" rel="self" type="application/rss+xml" />
+	<atom:link href="https://andyyin.github.io/links/index.xml" rel="self" type="application/rss+xml" />
     
     
   </channel>

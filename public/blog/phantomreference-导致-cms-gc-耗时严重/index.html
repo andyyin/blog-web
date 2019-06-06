@@ -1,0 +1,1316 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <script type="application/ld+json">
+    {
+        "@context" : "http://schema.org",
+        "@type" : "BlogPosting",
+        "mainEntityOfPage": {
+             "@type": "WebPage",
+             "@id": "https://andyyin.github.io"
+        },
+        "articleSection" : "blog",
+        "name" : "PhantomReference 导致 CMS GC 耗时严重",
+        "headline" : "PhantomReference 导致 CMS GC 耗时严重",
+        "description" : "介绍 GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。
+现象 上图很明显（公司内部监控没有区分 Old GC 和 Full GC）Old GC 耗时严重，大致看了几天的监控，基本上每次都很耗时，时间约 1s 左右，这里统计的 1s 左右的耗时指的是 stop-the-world 的时间。
+排查 那到底哪里耗时呢？我们得去看看 GC 日志，日志中有更多的信息
+2018-01-13T19:21:36.254: [GC [1 CMS-initial-mark: 2097444K(4194304K)] 2143492K(6081792K), 0.2197240 secs] [Times: user=0.01 sys=0.17, real=0.22 secs] 2018-01-13T19:21:36.474: [CMS-concurrent-mark-start] 2018-01-13T19:21:36.654: [CMS-concurrent-mark: 0.180/0.180 secs] [Times: user=0.65 sys=0.07, real=0.18 secs] 2018-01-13T19:21:36.654: [CMS-concurrent-preclean-start] 2018-01-13T19:21:36.700: [CMS-concurrent-preclean: 0.045/0.045 secs] [Times: user=0.05 sys=0.01, real=0.04 secs] 2018-01-13T19:21:36.700: [CMS-concurrent-abortable-preclean-start] CMS: abort preclean due to time 2018-01-13T19:21:41.",
+        "inLanguage" : "zh",
+        "author" : "",
+        "creator" : "",
+        "publisher": "",
+        "accountablePerson" : "",
+        "copyrightHolder" : "",
+        "copyrightYear" : "2018",
+        "datePublished": "2018-02-02 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2018-02-02 00:00:00 &#43;0000 UTC",
+        "url" : "https://andyyin.github.io/blog/phantomreference-%E5%AF%BC%E8%87%B4-cms-gc-%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/",
+        "wordCount" : "1131",
+        "keywords" : [ "Java","JVM","GC","CMS GC","优化","PhantomReference","Blog" ]
+    }
+    </script>
+        
+            
+                <title>PhantomReference 导致 CMS GC 耗时严重</title>
+            
+        
+
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content="Hugo 0.54.0" />
+        
+
+
+        
+            <meta name="author" content="涤生">
+        
+        
+            
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+            
+        
+
+        <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="PhantomReference 导致 CMS GC 耗时严重"/>
+<meta name="twitter:description" content="介绍 GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。
+现象 上图很明显（公司内部监控没有区分 Old GC 和 Full GC）Old GC 耗时严重，大致看了几天的监控，基本上每次都很耗时，时间约 1s 左右，这里统计的 1s 左右的耗时指的是 stop-the-world 的时间。
+排查 那到底哪里耗时呢？我们得去看看 GC 日志，日志中有更多的信息
+2018-01-13T19:21:36.254: [GC [1 CMS-initial-mark: 2097444K(4194304K)] 2143492K(6081792K), 0.2197240 secs] [Times: user=0.01 sys=0.17, real=0.22 secs] 2018-01-13T19:21:36.474: [CMS-concurrent-mark-start] 2018-01-13T19:21:36.654: [CMS-concurrent-mark: 0.180/0.180 secs] [Times: user=0.65 sys=0.07, real=0.18 secs] 2018-01-13T19:21:36.654: [CMS-concurrent-preclean-start] 2018-01-13T19:21:36.700: [CMS-concurrent-preclean: 0.045/0.045 secs] [Times: user=0.05 sys=0.01, real=0.04 secs] 2018-01-13T19:21:36.700: [CMS-concurrent-abortable-preclean-start] CMS: abort preclean due to time 2018-01-13T19:21:41."/>
+
+        <meta property="og:title" content="PhantomReference 导致 CMS GC 耗时严重" />
+<meta property="og:description" content="介绍 GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。
+现象 上图很明显（公司内部监控没有区分 Old GC 和 Full GC）Old GC 耗时严重，大致看了几天的监控，基本上每次都很耗时，时间约 1s 左右，这里统计的 1s 左右的耗时指的是 stop-the-world 的时间。
+排查 那到底哪里耗时呢？我们得去看看 GC 日志，日志中有更多的信息
+2018-01-13T19:21:36.254: [GC [1 CMS-initial-mark: 2097444K(4194304K)] 2143492K(6081792K), 0.2197240 secs] [Times: user=0.01 sys=0.17, real=0.22 secs] 2018-01-13T19:21:36.474: [CMS-concurrent-mark-start] 2018-01-13T19:21:36.654: [CMS-concurrent-mark: 0.180/0.180 secs] [Times: user=0.65 sys=0.07, real=0.18 secs] 2018-01-13T19:21:36.654: [CMS-concurrent-preclean-start] 2018-01-13T19:21:36.700: [CMS-concurrent-preclean: 0.045/0.045 secs] [Times: user=0.05 sys=0.01, real=0.04 secs] 2018-01-13T19:21:36.700: [CMS-concurrent-abortable-preclean-start] CMS: abort preclean due to time 2018-01-13T19:21:41." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://andyyin.github.io/blog/phantomreference-%E5%AF%BC%E8%87%B4-cms-gc-%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/" />
+<meta property="article:published_time" content="2018-02-02T00:00:00&#43;00:00"/>
+<meta property="article:modified_time" content="2018-02-02T00:00:00&#43;00:00"/>
+
+        <meta property="og:image" content="https://andyyin.github.io/images/logo.png">
+        <meta property="og:image:type" content="image/png">
+        <meta property="og:image:width" content="512">
+        <meta property="og:image:height" content="512">
+        
+<meta itemprop="name" content="PhantomReference 导致 CMS GC 耗时严重">
+<meta itemprop="description" content="介绍 GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。
+现象 上图很明显（公司内部监控没有区分 Old GC 和 Full GC）Old GC 耗时严重，大致看了几天的监控，基本上每次都很耗时，时间约 1s 左右，这里统计的 1s 左右的耗时指的是 stop-the-world 的时间。
+排查 那到底哪里耗时呢？我们得去看看 GC 日志，日志中有更多的信息
+2018-01-13T19:21:36.254: [GC [1 CMS-initial-mark: 2097444K(4194304K)] 2143492K(6081792K), 0.2197240 secs] [Times: user=0.01 sys=0.17, real=0.22 secs] 2018-01-13T19:21:36.474: [CMS-concurrent-mark-start] 2018-01-13T19:21:36.654: [CMS-concurrent-mark: 0.180/0.180 secs] [Times: user=0.65 sys=0.07, real=0.18 secs] 2018-01-13T19:21:36.654: [CMS-concurrent-preclean-start] 2018-01-13T19:21:36.700: [CMS-concurrent-preclean: 0.045/0.045 secs] [Times: user=0.05 sys=0.01, real=0.04 secs] 2018-01-13T19:21:36.700: [CMS-concurrent-abortable-preclean-start] CMS: abort preclean due to time 2018-01-13T19:21:41.">
+
+
+<meta itemprop="datePublished" content="2018-02-02T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2018-02-02T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="1131">
+
+
+
+<meta itemprop="keywords" content="Java,JVM,GC,CMS GC,优化,PhantomReference," />
+
+        
+
+        
+            
+        
+
+        
+        
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:400,800,900|Source+Sans+Pro:400,700">
+            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/main.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/add-on.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/academicons.min.css">
+        
+
+        
+            
+                
+            
+        
+
+
+  
+    
+    <link href='//cdn.bootcss.com/highlight.js/9.11.0/styles/github.min.css' rel='stylesheet' type='text/css' />
+  
+
+
+      
+    </head>
+    <body>
+
+      
+      <div id="wrapper">
+
+    
+    
+<header id="header">
+    
+      <h1><a href="https://andyyin.github.io/">涤生|个人博客</a></h1>
+    
+
+    <nav class="links">
+        <ul>
+            
+                <li>
+                    <a href="https://andyyin.github.io/">
+                            <i class="fa fa-home">&nbsp;</i>主页
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/blog/">
+                            <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/categories/">
+                            <i class="fa fa-sitemap">&nbsp;</i>分类
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/about/">
+                            <i class="fa fa-id-card-o">&nbsp;</i>关于
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/links/">
+                            <i class="fa fa-link">&nbsp;</i>友链
+                    </a>
+                </li>
+            
+        </ul>
+    </nav>
+    <nav class="main">
+        <ul>
+            
+            <li id="share-nav" class="share-menu" style="display:none;">
+                <a class="fa-share-alt" href="#share-menu">Share</a>
+            </li>
+            
+            <li class="search">
+                <a class="fa-search" href="#search">Search</a>
+                <form id="search" method="get" action="//google.com/search">
+                    <input type="text" name="q" placeholder="Search" />
+                    <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+                </form>
+            </li>
+            <li class="menu">
+                <a class="fa-bars" href="#menu">Menu</a>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+
+<section id="menu">
+
+    
+        <section>
+            <form class="search" method="get" action="//google.com/search">
+                <input type="text" name="q" placeholder="Search" />
+                <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+            </form>
+        </section>
+
+    
+        <section>
+            <ul class="links">
+                
+                    <li>
+                        <a href="https://andyyin.github.io/">
+                            <h3>
+                                <i class="fa fa-home">&nbsp;</i>主页
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/blog/">
+                            <h3>
+                                <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/categories/">
+                            <h3>
+                                <i class="fa fa-sitemap">&nbsp;</i>分类
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/about/">
+                            <h3>
+                                <i class="fa fa-id-card-o">&nbsp;</i>关于
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/links/">
+                            <h3>
+                                <i class="fa fa-link">&nbsp;</i>友链
+                            </h3>
+                        </a>
+                    </li>
+                
+            </ul>
+        </section>
+
+    
+        <section class="recent-posts">
+            <div class="mini-posts">
+                <header>
+                    <h3>Recent Posts</h3>
+                </header>
+                
+
+                
+                    
+                
+
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-19'>
+                                    May 19, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-09'>
+                                    May 9, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-21'>
+                                    April 21, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-15'>
+                                    April 15, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/">再次剖析 “一个 JVM 参数引发的频繁 CMS GC”</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-10'>
+                                    April 10, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+
+                
+                    <a href=
+                        
+                            /blog/
+                        
+                        class="button">更多</a>
+                
+            </div>
+        </section>
+
+    
+        
+</section>
+
+    <section id="share-menu">
+    <section id="social-share-nav">
+        <ul class="links">
+            <header>
+                <h3>Share this post <i class="fa fa-smile-o"></i></h3>
+            </header>
+            
+
+
+
+<li>
+  <a href="//twitter.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2fphantomreference-%25E5%25AF%25BC%25E8%2587%25B4-cms-gc-%25E8%2580%2597%25E6%2597%25B6%25E4%25B8%25A5%25E9%2587%258D%2f&amp;text=PhantomReference%20%e5%af%bc%e8%87%b4%20CMS%20GC%20%e8%80%97%e6%97%b6%e4%b8%a5%e9%87%8d&amp;via=" target="_blank" class="share-btn twitter">
+    <i class="fa fa-twitter"></i>
+    <p>Twitter</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//plus.google.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2fphantomreference-%25E5%25AF%25BC%25E8%2587%25B4-cms-gc-%25E8%2580%2597%25E6%2597%25B6%25E4%25B8%25A5%25E9%2587%258D%2f" target="_blank" class="share-btn google-plus">
+    <i class="fa fa-google-plus"></i>
+    <p>Google+</p>
+  </a>
+</li>
+
+
+
+
+
+<li>
+  <a href="//www.facebook.com/sharer/sharer.php?u=https%3a%2f%2fandyyin.github.io%2fblog%2fphantomreference-%25E5%25AF%25BC%25E8%2587%25B4-cms-gc-%25E8%2580%2597%25E6%2597%25B6%25E4%25B8%25A5%25E9%2587%258D%2f" target="_blank" class="share-btn facebook">
+    <i class="fa fa-facebook"></i>
+    <p>Facebook</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//reddit.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2fphantomreference-%25E5%25AF%25BC%25E8%2587%25B4-cms-gc-%25E8%2580%2597%25E6%2597%25B6%25E4%25B8%25A5%25E9%2587%258D%2f&amp;title=PhantomReference%20%e5%af%bc%e8%87%b4%20CMS%20GC%20%e8%80%97%e6%97%b6%e4%b8%a5%e9%87%8d" target="_blank" class="share-btn reddit">
+    <i class="fa fa-reddit-alien"></i>
+    <p>Reddit</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.linkedin.com/shareArticle?url=https%3a%2f%2fandyyin.github.io%2fblog%2fphantomreference-%25E5%25AF%25BC%25E8%2587%25B4-cms-gc-%25E8%2580%2597%25E6%2597%25B6%25E4%25B8%25A5%25E9%2587%258D%2f&amp;title=PhantomReference%20%e5%af%bc%e8%87%b4%20CMS%20GC%20%e8%80%97%e6%97%b6%e4%b8%a5%e9%87%8d" target="_blank" class="share-btn linkedin">
+      <i class="fa fa-linkedin"></i>
+      <p>LinkedIn</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.stumbleupon.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2fphantomreference-%25E5%25AF%25BC%25E8%2587%25B4-cms-gc-%25E8%2580%2597%25E6%2597%25B6%25E4%25B8%25A5%25E9%2587%258D%2f&amp;title=PhantomReference%20%e5%af%bc%e8%87%b4%20CMS%20GC%20%e8%80%97%e6%97%b6%e4%b8%a5%e9%87%8d" target="_blank" class="share-btn stumbleupon">
+    <i class="fa fa-stumbleupon"></i>
+    <p>StumbleUpon</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.pinterest.com/pin/create/button/?url=https%3a%2f%2fandyyin.github.io%2fblog%2fphantomreference-%25E5%25AF%25BC%25E8%2587%25B4-cms-gc-%25E8%2580%2597%25E6%2597%25B6%25E4%25B8%25A5%25E9%2587%258D%2f&amp;description=PhantomReference%20%e5%af%bc%e8%87%b4%20CMS%20GC%20%e8%80%97%e6%97%b6%e4%b8%a5%e9%87%8d" target="_blank" class="share-btn pinterest">
+    <i class="fa fa-pinterest-p"></i>
+    <p>Pinterest</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="mailto:?subject=Check out this post by %e6%b6%a4%e7%94%9f&amp;body=https%3a%2f%2fandyyin.github.io%2fblog%2fphantomreference-%25E5%25AF%25BC%25E8%2587%25B4-cms-gc-%25E8%2580%2597%25E6%2597%25B6%25E4%25B8%25A5%25E9%2587%258D%2f" target="_blank" class="share-btn email">
+    <i class="fa fa-envelope"></i>
+    <p>Email</p>
+  </a>
+</li>
+
+
+        </ul>
+    </section>
+</section>
+
+    
+    <div id="main">
+        
+        
+        <article class="post">
+  <header>
+    <div class="title">
+        
+            <h1><a href="https://andyyin.github.io/blog/phantomreference-%E5%AF%BC%E8%87%B4-cms-gc-%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/">PhantomReference 导致 CMS GC 耗时严重</a></h1>
+            
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2018-02-02'>
+            2018-02-02</time>
+        <span class="author">涤生</span>
+        
+            <p>6 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+
+  
+
+  
+
+  <div id="content">
+    
+
+<h1 id="介绍">介绍</h1>
+
+<p>GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。</p>
+
+<h1 id="现象">现象</h1>
+
+<p><img src="https://andyyin.github.io/img/2018/02/cmsgc/oldgc.png" alt="Old GC 监控信息" /></p>
+
+<p>上图很明显（公司内部监控没有区分 Old GC 和 Full GC）Old GC 耗时严重，大致看了几天的监控，基本上每次都很耗时，时间约 1s 左右，这里统计的 1s 左右的耗时指的是 stop-the-world 的时间。</p>
+
+<h1 id="排查">排查</h1>
+
+<p>那到底哪里耗时呢？我们得去看看 GC 日志，日志中有更多的信息</p>
+
+<pre><code class="language-java">2018-01-13T19:21:36.254: [GC [1 CMS-initial-mark: 2097444K(4194304K)] 2143492K(6081792K), 0.2197240 secs] [Times: user=0.01 sys=0.17, real=0.22 secs] 
+2018-01-13T19:21:36.474: [CMS-concurrent-mark-start]
+2018-01-13T19:21:36.654: [CMS-concurrent-mark: 0.180/0.180 secs] [Times: user=0.65 sys=0.07, real=0.18 secs] 
+2018-01-13T19:21:36.654: [CMS-concurrent-preclean-start]
+2018-01-13T19:21:36.700: [CMS-concurrent-preclean: 0.045/0.045 secs] [Times: user=0.05 sys=0.01, real=0.04 secs] 
+2018-01-13T19:21:36.700: [CMS-concurrent-abortable-preclean-start]
+ CMS: abort preclean due to time 2018-01-13T19:21:41.765: [CMS-concurrent-abortable-preclean: 5.051/5.065 secs] [Times: user=7.08 sys=0.51, real=5.07 secs] 
+2018-01-13T19:21:41.768: [GC[YG occupancy: 503315 K (1887488 K)]2018-01-13T19:21:41.768: [Rescan (parallel) , 0.0975470 secs]
+2018-01-13T19:21:41.866: [weak refs processing, 0.7034340 secs]
+2018-01-13T19:21:42.569: [class unloading, 0.0152410 secs]
+2018-01-13T19:21:42.585: [scrub symbol table, 0.0118450 secs]
+2018-01-13T19:21:42.597: [scrub string table, 0.0021360 secs] 
+[1 CMS-remark: 2097444K(4194304K)] 2600759K(6081792K), 0.8884580 secs] [Times: user=1.17 sys=0.00, real=0.89 secs] 
+2018-01-13T19:21:42.657: [CMS-concurrent-sweep-start]
+2018-01-13T19:21:44.283: [CMS-concurrent-sweep: 1.571/1.626 secs] [Times: user=2.77 sys=0.15, real=1.62 secs] 
+2018-01-13T19:21:44.284: [CMS-concurrent-reset-start]
+2018-01-13T19:21:44.363: [CMS-concurrent-reset: 0.079/0.079 secs] [Times: user=0.04 sys=0.08, real=0.08 secs] 
+</code></pre>
+
+<p>CMS GC 日志比较详细，会打印各个阶段处理的详细信息。
+这里我们重点关注两个 stop-the-world 的阶段 CMS-initial-mark 和 CMS-remark。可以看到 CMS-initial-mark 耗时 0.22s，CMS-remark 耗时 0.89s，所以主要是 CMS-remark 阶段比较耗时。remark 阶段做的事情分好几块，具体是哪块耗时严重呢？
+细看下 CMS-remark 阶段的日志，应该很快能发现 weak refs processing 处理比较耗时。</p>
+
+<pre><code class="language-java">    [weak refs processing, 0.7034340 secs
+</code></pre>
+
+<p>看到这里，大家一定很想知道 weak refs processing 是什么？
+为什么处理这么耗时？</p>
+
+<pre><code class="language-java">void ReferenceProcessor::process_discovered_references(
+  BoolObjectClosure*           is_alive,
+  OopClosure*                  keep_alive,
+  VoidClosure*                 complete_gc,
+  AbstractRefProcTaskExecutor* task_executor) {
+  NOT_PRODUCT(verify_ok_to_handle_reflists());
+
+  assert(!enqueuing_is_done(), &quot;If here enqueuing should not be complete&quot;);
+  // Stop treating discovered references specially.
+  disable_discovery();
+
+  bool trace_time = PrintGCDetails &amp;&amp; PrintReferenceGC;
+  // Soft references
+  {
+    TraceTime tt(&quot;SoftReference&quot;, trace_time, false, gclog_or_tty);
+    process_discovered_reflist(_discoveredSoftRefs, _current_soft_ref_policy, true,
+                               is_alive, keep_alive, complete_gc, task_executor);
+  }
+
+  update_soft_ref_master_clock();
+
+  // Weak references
+  {
+    TraceTime tt(&quot;WeakReference&quot;, trace_time, false, gclog_or_tty);
+    process_discovered_reflist(_discoveredWeakRefs, NULL, true,
+                               is_alive, keep_alive, complete_gc, task_executor);
+  }
+
+  // Final references
+  {
+    TraceTime tt(&quot;FinalReference&quot;, trace_time, false, gclog_or_tty);
+    process_discovered_reflist(_discoveredFinalRefs, NULL, false,
+                               is_alive, keep_alive, complete_gc, task_executor);
+  }
+
+  // Phantom references
+  {
+    TraceTime tt(&quot;PhantomReference&quot;, trace_time, false, gclog_or_tty);
+    process_discovered_reflist(_discoveredPhantomRefs, NULL, false,
+                               is_alive, keep_alive, complete_gc, task_executor);
+  }
+
+  // Weak global JNI references. It would make more sense (semantically) to
+  // traverse these simultaneously with the regular weak references above, but
+  // that is not how the JDK1.2 specification is. See #4126360. Native code can
+  // thus use JNI weak references to circumvent the phantom references and
+  // resurrect a &quot;post-mortem&quot; object.
+  {
+    TraceTime tt(&quot;JNI Weak Reference&quot;, trace_time, false, gclog_or_tty);
+    if (task_executor != NULL) {
+      task_executor-&gt;set_single_threaded_mode();
+    }
+    process_phaseJNI(is_alive, keep_alive, complete_gc);
+  }
+}
+</code></pre>
+
+<p>看 JVM 源码，weak refs processing 主要包括 SoftReference、WeakReference、FinalReference、PhantomReference 以及 JNI Weak Reference 这五种 Reference 对象的处理，处理的主要内容是对之前标记的 Reference 对象重新处理，重新判断是否需要标记（不标记就是要回收的），如果不标记就需要放到 refqueue 里，等待 java ReferenceHandler 线程处理。
+所以从工作的主要内容看各种 Reference 的处理时间跟 reference 的个数成正比。</p>
+
+<p>那么接下来我们需要做的是确定是哪种 Reference 比较耗时，然后进行针对性优化。所以加了个参数 -XX:+PrintReferenceGC，来具体显示各种 Reference 的个数和处理时间。</p>
+
+<pre><code class="language-java">2018-01-30T08:30:08.188: [GC[YG occupancy: 254029 K (1887488 K)]
+2018-01-30T08:30:08.188: [Rescan (parallel) , 0.0503640 secs]
+2018-01-30T08:30:08.239: [weak refs processing
+2018-01-30T08:30:08.239: [SoftReference, 4468 refs, 0.0006040 secs]
+2018-01-30T08:30:08.239: [WeakReference, 286808 refs, 0.0336870 secs]
+2018-01-30T08:30:08.273: [FinalReference, 35456 refs, 0.0271650 secs]
+2018-01-30T08:30:08.300: [PhantomReference, 8041 refs, 3 refs, 0.4335280 secs]
+2018-01-30T08:30:08.734: [JNI Weak Reference, 0.0000250 secs], 0.4951020 secs]
+2018-01-30T08:30:08.734: [class unloading, 0.0143290 secs]
+2018-01-30T08:30:08.748: [scrub symbol table, 0.0110140 secs]
+2018-01-30T08:30:08.759: [scrub string table, 0.0015380 secs] [1 CMS-remark: 2098695K(4194304K)] 2352725K(6081792K), 0.6112680 secs] [Times: user=0.76 sys=0.00, real=0.61 secs]
+</code></pre>
+
+<p>从上面的日志就能很明显看出来是 PhantomReference 处理时间较长。
+找到了优化的点，处理起来也就简单了。</p>
+
+<h1 id="解决">解决</h1>
+
+<p>我们需要做下面两件事。</p>
+
+<p>1、确定 PhantomReference 的产生的原因，从源头控制；
+2、通过 JVM 提供的参数，进行优化。</p>
+
+<h2 id="参数优化">参数优化</h2>
+
+<p>我们先来做第二件事吧，因为它比较容易，JVM 确实提供了相关的优化参数，通过 -XX:+ParallelRefProcEnabled 参数来并行处理 Reference，加快处理速度，缩短耗时。
+这里并行处理的线程数，是 -XX:ParallelGCThreads 这个参数控制的，如果没有设置 ParallelGCThreads 默认跟 cpu 核数相关，是可以计算的</p>
+
+<p>对应的 JVM 源码是</p>
+
+<pre><code class="language-java">unsigned int Abstract_VM_Version::nof_parallel_worker_threads(
+                                                      unsigned int num,
+                                                      unsigned int den,
+                                                      unsigned int switch_pt) {
+  if (FLAG_IS_DEFAULT(ParallelGCThreads)) {
+    assert(ParallelGCThreads == 0, &quot;Default ParallelGCThreads is not 0&quot;);
+    unsigned int threads;
+    // For very large machines, there are diminishing returns
+    // for large numbers of worker threads.  Instead of
+    // hogging the whole system, use a fraction of the workers for every
+    // processor after the first 8.  For example, on a 72 cpu machine
+    // and a chosen fraction of 5/8
+    // use 8 + (72 - 8) * (5/8) == 48 worker threads.
+    unsigned int ncpus = (unsigned int) os::initial_active_processor_count();
+    threads = (ncpus &lt;= switch_pt) ?
+             ncpus :
+             (switch_pt + ((ncpus - switch_pt) * num) / den);
+#ifndef _LP64
+    // On 32-bit binaries the virtual address space available to the JVM
+    // is usually limited to 2-3 GB (depends on the platform).
+    // Do not use up address space with too many threads (stacks and per-thread
+    // data). Note that x86 apps running on Win64 have 2 stacks per thread.
+    // GC may more generally scale down threads by max heap size (etc), but the
+    // consequences of over-provisioning threads are higher on 32-bit JVMS,
+    // so add hard limit here:
+    threads = MIN2(threads, (2*switch_pt));
+#endif
+    return threads;
+  } else {
+    return ParallelGCThreads;
+  }
+</code></pre>
+
+<p>简单根据源码翻译下就是</p>
+
+<pre><code class="language-java">  if ( ncpus  &lt;=  8) {
+      return ncpus;
+  } else {
+      return 8 + (ncpus - 8) * 5 / 8;
+  }
+</code></pre>
+
+<p>设置 -XX:+ParallelRefProcEnabled 参数后效果也很明显</p>
+
+<pre><code class="language-java">  [PhantomReference, 6117 refs, 9 refs, 0.1351920 secs]
+</code></pre>
+
+<h2 id="根源解决">根源解决</h2>
+
+<p>要想从根源解决，我们必须找到 PhantomReference 产生的相关代码，这里一般存在两种方式：</p>
+
+<p>1、简单通过 jmap -histo [pid]，找到相关的类。
+这种方式比较轻量，对应用损伤较小，不过只能看到各个类的对象个数，总体占用空间大小，看不到很多详细信息。</p>
+
+<p>2、jmap -dump:format=b,file=dumpFileName [pid]，拿到堆的 dump 文件，然后通过 mat 分析。
+这种方式比较重，dump 时间一般很长，需要先摘除机器流量，然后进行操作。</p>
+
+<p>我们选择了第二种，用 mat 分析了下 dump 文件。从下图类的名字上也能很明显看出，就是 ConnectionPhantomReference 对象了。
+<img src="https://andyyin.github.io/img/2018/02/cmsgc/mat.png" alt="mat分析结果" /></p>
+
+<p>根据包名 com.mysql.jdbc，看来要想搞清楚问题的根源，还得撸下 jdbc 的源码了。</p>
+
+<h3 id="connectionphantomreference产生的原因">ConnectionPhantomReference产生的原因</h3>
+
+<p>一般 PhantomReference 是用来在 GC 时做相关的做资源回收，这里也不例外。
+我们来看下 ConnectionPhantomReference 类，从构造方法上看，有两个参数：
+一个是 ConnnectionImpl，不用想也知道是与数据库之间的连接对象。
+一个是 ReferenceQueue。
+另外还有一个 cleanup 方法，是用来回收 connection 相关资源。</p>
+
+<p>ReferenceQueue 是用来做什么的呢？要了解这个问题就需要了解下 PhantomReference 是如何回收资源的。</p>
+
+<p>被 PhantomReference 引用的对象在被 GC 时，JVM 会将 PhantomReference 对象扔到 refqueue，由 ReferenceHandler 线程取出放入到 ReferenceQueue 中，放入 ReferenceQueue 中做什么，莫急，待我慢慢道来。</p>
+
+<pre><code class="language-java">static class ConnectionPhantomReference extends PhantomReference&lt;ConnectionImpl&gt; {
+        private NetworkResources io;
+
+        ConnectionPhantomReference(ConnectionImpl connectionImpl, ReferenceQueue&lt;ConnectionImpl&gt; q) {
+            super(connectionImpl, q);
+
+            try {
+                this.io = connectionImpl.getIO().getNetworkResources();
+            } catch (SQLException e) {
+                // if we somehow got here and there's really no i/o, we deal with it later
+            }
+        }
+
+        void cleanup() {
+            if (this.io != null) {
+                try {
+                    this.io.forceClose();
+                } finally {
+                    this.io = null;
+                }
+            }
+        }
+    }
+</code></pre>
+
+<p>了解了上述 PhantomReference 原理后，再看看 ConnectionPhantomReference 什么时候生成的。看下面代码，很明显是在生成数据库连接对象 connection 时，将 connection 包装成 ConnectionPhantomReference 存入 connectionPhantomRefs 这个 ConcurrentHashMap 中。</p>
+
+<pre><code class="language-java">   protected static void trackConnection(Connection newConn) {
+
+        ConnectionPhantomReference phantomRef = new ConnectionPhantomReference((ConnectionImpl) newConn, refQueue);
+        connectionPhantomRefs.put(phantomRef, phantomRef);
+    }
+</code></pre>
+
+<pre><code class="language-java">  protected static final ConcurrentHashMap&lt;ConnectionPhantomReference, ConnectionPhantomReference&gt; connectionPhantomRefs = new ConcurrentHashMap&lt;ConnectionPhantomReference, ConnectionPhantomReference&gt;();
+
+  protected static final ReferenceQueue&lt;ConnectionImpl&gt; refQueue = new ReferenceQueue&lt;ConnectionImpl&gt;();
+</code></pre>
+
+<p>上面的 connectionPhantomRefs 和 refQueue 是 NonRegisteringDriver 这个类的类成员。</p>
+
+<p>那 connection 资源的回收是怎么完成的呢？</p>
+
+<pre><code class="language-java">public class AbandonedConnectionCleanupThread extends Thread {
+    private static boolean running = true;
+    private static Thread threadRef = null;
+
+    public AbandonedConnectionCleanupThread() {
+        super(&quot;Abandoned connection cleanup thread&quot;);
+    }
+
+    @Override
+    public void run() {
+        threadRef = this;
+        while (running) {
+            try {
+                Reference&lt;? extends ConnectionImpl&gt; ref = NonRegisteringDriver.refQueue.remove(100);
+                if (ref != null) {
+                    try {
+                        ((ConnectionPhantomReference) ref).cleanup();
+                    } finally {
+                        NonRegisteringDriver.connectionPhantomRefs.remove(ref);
+                    }
+                }
+
+            } catch (Exception ex) {
+                // no where to really log this if we're static
+            }
+        }
+    }
+
+    public static void shutdown() throws InterruptedException {
+        running = false;
+        if (threadRef != null) {
+            threadRef.interrupt();
+            threadRef.join();
+            threadRef = null;
+        }
+    }
+
+}
+
+</code></pre>
+
+<p>原来是有另外一个类 AbandonedConnectionCleanupThread 在偷偷干这个事， AbandonedConnectionCleanupThread 这个线程就是从 NonRegisteringDriver.refQueue 中拿到 ConnectionPhantomReference，然后执行 cleanup 方法，最后删除 connectionPhantomRefs 这个 ConcurrentHashMap 中的 ConnectionPhantomReference 对象，完成 connection 相关资源的回收。
+这里 NonRegisteringDriver.refQueue 中的 PhantomReference 就是之前提到由 ReferenceHandler 线程放进去的 ConnectionPhantomReference 对象。</p>
+
+<p>看到这里大家应该明白，感情是 jdbc 为每个 connection 都生成了一个 ConnectionPhantomReference，目的是为了当 connection 对象回收时，顺便回收相关资源。这其实是一个保底操作，是怕 connnection 资源被上层的连接池或者使用者忘记 close，从而导致资源泄漏。</p>
+
+<p>但是为什么这么多 PhantomReference，通过 GC 日志看约有 8000 多个，也就是有 8000 多个数据库连接资源，而且都在 Old Gen？
+都在 Old 区很好解释，因为连接资源一般存活时间比较久，经过多次 Young GC 都能存活到 Old 区。
+8000 多个连接这确实有点多，其实存活的没那么多，看了下这个应用使用的数据源比较多有 10 多个，每个数据源一主两从，并且连接池的最大连接数是 36，随着程序使用过程中的数据库连接资源的回收与生成，时间长了，连接确实会不少。另外这个应用 Old GC 的时间间隔比较长，很多废弃的连接都不会及时回收。</p>
+
+<p>说了这么多都是在解释为什么有这么多 PhantomReference 对象。
+现在问题的源头也找到了，我们怎么从源头解决这个问题呢？</p>
+
+<p>其实也很简单，首先 PhantomReference 的产生是 jdbc 的保底措施，其实这种保底措施也不见得需要，一般数据库连接都是有连接池控制，连接池自身是会确保连接资源的回收，所以这个保底措施是不是可以 disable 掉，看了下源码，没有 disable 的地方，那只能程序解决了，解决方式也很简单，删掉 connectionPhantomRefs 这个 ConcurrentHashMap 中的数据就好了，这就减少 PhantomReference 的数量。来降低 weak refs processing 的处理时间，怎么删就不用说了吧。</p>
+
+<h1 id="总结">总结</h1>
+
+<p>GC 优化的问题，其实思路都是差不多的，找到问题的原因，也就找到了优化的点，下手起来也就没那么困难了。目前为止，这个问题确实是解决了，但是对于 JVM 处理 8000 多个 PhantomReference，为啥耗时就这么长，具体到底做了什么，本人一直还有疑问，后面还需继续细细考究。</p>
+
+<hr />
+
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
+<p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
+
+<p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
+
+  </div>
+
+  <footer>
+    <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/jvm">JVM</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/cms-gc">CMS GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E4%BC%98%E5%8C%96">优化</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/phantomreference">PhantomReference</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+
+</article>
+
+<ul class="actions pagination">
+    
+
+    
+        <li><a href="https://andyyin.github.io/blog/%E4%B8%80%E6%AC%A1-young-gc-%E7%9A%84%E4%BC%98%E5%8C%96%E5%AE%9E%E8%B7%B5finalreference-%E7%9B%B8%E5%85%B3/"
+                class="button big next">一次 Young GC 的优化实践（FinalReference 相关）</a></li>
+    
+</ul>
+
+
+    </div>
+    
+<section id="sidebar">
+
+  
+  <section id="intro">
+    
+    
+      
+        <a href='https://andyyin.github.io/'><img src="https://andyyin.github.io/img/main/disheng.jpg" class="intro-circle" width="100" alt="涤生的博客" /></a>
+      
+    
+    
+      <header>
+        <h2>涤生的博客</h2>
+        <p>主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      </header>
+    
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+  </section>
+
+  
+  <section class="recent-posts">
+    <div class="mini-posts">
+      <header>
+        <h3>最新文章</h3>
+      </header>
+      <div class="posts-container">
+        
+
+        
+          
+        
+
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-19'>
+                2019-05-19
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-09'>
+                2019-05-09
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-21'>
+                2019-04-21
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-15'>
+                2019-04-15
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E5%86%8D%E6%AC%A1%E5%89%96%E6%9E%90-%E4%B8%80%E4%B8%AA-jvm-%E5%8F%82%E6%95%B0%E5%BC%95%E5%8F%91%E7%9A%84%E9%A2%91%E7%B9%81-cms-gc/">再次剖析 “一个 JVM 参数引发的频繁 CMS GC”</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-10'>
+                2019-04-10
+              </time>
+            </header>
+            
+
+          </article>
+        
+      </div>
+
+      
+        <a href=
+          
+            /blog/
+          
+        class="button">更多</a>
+      
+    </div>
+  </section>
+
+  
+  
+  
+  
+  
+    <section id="categories">
+      <header>
+        <h3>
+          <a href="https://andyyin.github.io/categories/">分类</a>
+        </h3>
+      </header>
+        
+          
+        
+
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">6</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/jvm/">JVM</a>
+                <span style="float:right;">4</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/zookeeper/">Zookeeper</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+    </section>
+  
+  
+
+  
+  
+    <section id="mini-bio">
+      <h3>关于我</h3>
+      <p>涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      <a href="https://andyyin.github.io/about/" class="button">了解更多</a>
+    </section>
+  
+
+  
+  <section id="footer">
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+    <p class="copyright">
+      
+        &copy; 2019
+        
+          涤生的博客
+        
+      .
+      Powered by <a href="https://andyyin.github.io/" target="_blank">涤生</a>
+    </p>
+  </section>
+</section>
+
+    </div>
+    <a id="back-to-top" href="#" class="fa fa-arrow-up fa-border fa-2x"></a>
+    
+
+    
+      
+    
+
+    
+      
+      
+      
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/highlight.min.js"></script>
+        
+        
+        
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/r.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/yaml.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/css.min.js"></script>
+        <script>hljs.configure({languages: []}); hljs.initHighlightingOnLoad();</script>
+      
+    
+    
+    
+      <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/skel/3.0.1/skel.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.js"></script>
+      <script src="https://andyyin.github.io/js/util.js"></script>
+      <script src="https://andyyin.github.io/js/main.js"></script>
+      <script src="https://andyyin.github.io/js/backToTop.js"></script>
+    
+
+    
+      
+        
+      
+    
+
+    
+    <script>hljs.initHighlightingOnLoad();</script>
+      <script src="//yihui.name/js/math-code.js"></script>
+<script async
+src="//cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+  </body>
+</html>
+

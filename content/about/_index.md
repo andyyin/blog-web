@@ -1,6 +1,6 @@
 +++
 title = "关于"
-date = "2015-04-09"
+date = "2019-04-09"
 +++
 
 涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。
@@ -21,13 +21,15 @@ date = "2015-04-09"
 ******
 * 殷琦，男
 * Github：https://github.com/andyyin
-* 本人目前就职于某大型互联网公司基础架构部，主要负责服务治理、Serverless 相关工作。
+* 涤生目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。
+* 涤生是[《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》](https://item.jd.com/12585284.html)的作者之一，欢迎支持。
+* 涤生是ServiceMesher社区成员，参与[《Knative 入门》](http://www.servicemesher.com/getting-started-with-knative/)的图书翻译工作。
 <br/>
 <br/>
 
 ## 微信公众号
 ******
-个人微信公共号，感兴趣的关注下，获取更多技术文章
+涤生的微信公共号，感兴趣的关注下，获取更多技术文章
 
 ![微信二维码](/img/main/officialAccount.jpg) 
 <br/>

@@ -1,7 +1,7 @@
 +++
 author = "涤生"
-categories = ["Java", "GC"]
-tags = ["Java", "JVM", "GC", "Young GC", "优化", "PhantomReference"]
+categories = ["Java","GC","JVM"]
+tags = ["Java", "JVM", "GC", "CMS GC", "优化", "PhantomReference"]
 date = "2018-02-02"
 description = ""
 featured = ""

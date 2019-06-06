@@ -51,10 +51,10 @@
     
     <item>
       <title>PhantomReference 导致 CMS GC 耗时严重</title>
-      <link>https://andyyin.github.io/blog/phantomreference%E5%AF%BC%E8%87%B4cms-gc%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/</link>
+      <link>https://andyyin.github.io/blog/phantomreference-%E5%AF%BC%E8%87%B4-cms-gc-%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/</link>
       <pubDate>Fri, 02 Feb 2018 00:00:00 +0000</pubDate>
       
-      <guid>https://andyyin.github.io/blog/phantomreference%E5%AF%BC%E8%87%B4cms-gc%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/</guid>
+      <guid>https://andyyin.github.io/blog/phantomreference-%E5%AF%BC%E8%87%B4-cms-gc-%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/</guid>
       <description>介绍 GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。
 现象 上图很明显（公司内部监控没有区分 Old GC 和 Full GC）Old GC 耗时严重，大致看了几天的监控，基本上每次都很耗时，时间约 1s 左右，这里统计的 1s 左右的耗时指的是 stop-the-world 的时间。
 排查 那到底哪里耗时呢？我们得去看看 GC 日志，日志中有更多的信息

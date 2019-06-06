@@ -111,7 +111,7 @@ pygmentCodeFences = true
 
 [params.postAmount]
 # Sets the number of recent posts to show in the sidebar. The default value is 5.
-    sidebar = 4
+    sidebar = 5
 
 # Sets the menu items in the navigation bar
 # Identifier prepends a Font Awesome icon to the menu item
@@ -150,6 +150,13 @@ pygmentCodeFences = true
 #  url = "/contact/"
 #  identifier = "fa fa-envelope-o"
 #  weight = 5
+
+[[menu.main]]
+  name = "友链"
+  url = "/links/"
+  identifier = "fa fa-link"
+  weight = 5
+
 
 # Sets Social Media icons to appear and link to your account. Value should be your
 # username unless otherwise noted. These are the icons affected by socialAppearAtTop

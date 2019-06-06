@@ -1,6 +1,6 @@
 +++
 author = "涤生"
-categories = ["Java", "GC"]
+categories = ["Java","GC","JVM"]
 tags = ["Java", "JVM", "GC", "Young GC", "优化", "FinalReference"]
 date = "2019-02-23"
 description = ""

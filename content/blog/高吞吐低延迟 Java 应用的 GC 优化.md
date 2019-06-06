@@ -1,7 +1,7 @@
 
 +++
 author = "涤生"
-categories = ["Java", "GC"]
+categories = ["Java","GC","JVM"]
 tags = ["高可用", "低延时", "Java", "GC", "CMS"]
 date = "2019-04-21"
 description = ""
