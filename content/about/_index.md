@@ -21,9 +21,9 @@ date = "2019-04-09"
 ******
 * 殷琦，男
 * Github：https://github.com/andyyin
-* 涤生目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。
-* 涤生是[《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》](https://item.jd.com/12585284.html)的作者之一，欢迎支持。
-* 涤生是ServiceMesher社区成员，参与[《Knative 入门》](http://www.servicemesher.com/getting-started-with-knative/)的图书翻译工作。
+* 目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。
+* [《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》](https://item.jd.com/12585284.html)的作者之一，欢迎支持。
+* ServiceMesher 社区成员，参与[《Knative 入门》](http://www.servicemesher.com/getting-started-with-knative/)图书的翻译工作。
 <br/>
 <br/>
 

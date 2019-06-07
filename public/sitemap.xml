@@ -119,13 +119,13 @@
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/tags/gc/</loc>
+    <loc>https://andyyin.github.io/categories/gc/</loc>
     <lastmod>2019-05-09T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/categories/gc/</loc>
+    <loc>https://andyyin.github.io/tags/gc/</loc>
     <lastmod>2019-05-09T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
@@ -137,25 +137,25 @@
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/tags/jvm/</loc>
-    <lastmod>2019-04-10T00:00:00+00:00</lastmod>
-    <priority>0</priority>
-  </url>
-  
-  <url>
     <loc>https://andyyin.github.io/categories/jvm/</loc>
     <lastmod>2019-04-21T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/tags/java/</loc>
-    <lastmod>2019-05-09T00:00:00+00:00</lastmod>
+    <loc>https://andyyin.github.io/tags/jvm/</loc>
+    <lastmod>2019-04-10T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
   <url>
     <loc>https://andyyin.github.io/categories/java/</loc>
+    <lastmod>2019-05-09T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://andyyin.github.io/tags/java/</loc>
     <lastmod>2019-05-09T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
@@ -185,13 +185,13 @@
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/tags/zookeeper/</loc>
+    <loc>https://andyyin.github.io/categories/zookeeper/</loc>
     <lastmod>2019-05-19T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/categories/zookeeper/</loc>
+    <loc>https://andyyin.github.io/tags/zookeeper/</loc>
     <lastmod>2019-05-19T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
