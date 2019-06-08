@@ -1,0 +1,1313 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <script type="application/ld+json">
+    {
+        "@context" : "http://schema.org",
+        "@type" : "BlogPosting",
+        "mainEntityOfPage": {
+             "@type": "WebPage",
+             "@id": "https://andyyin.github.io"
+        },
+        "articleSection" : "blog",
+        "name" : "Java 堆外内存回收原理",
+        "headline" : "Java 堆外内存回收原理",
+        "description" : "DirectByteBuffer 简介 DirectByteBuffer 这个类是 JDK 提供使用堆外内存的一种途径，当然常见的业务开发一般不会接触到，即使涉及到也可能是框架（如 Netty、RPC 等）使用的，对框架使用者来说也是透明的。
+堆外内存的优势 堆外内存优势在 IO 操作上，对于网络 IO，使用 Socket 发送数据时，能够节省堆内存到堆外内存的数据拷贝，所以性能更高。看过 Netty 源码的同学应该了解，Netty 使用堆外内存池来实现零拷贝技术。对于磁盘 IO 时，也可以使用内存映射，来提升性能。 另外，更重要的几乎不用考虑堆内存烦人的 GC 问题。
+堆外内存的创建 我们直接来看代码，首先向 Bits 类申请额度，Bits 类内部维护着当前已经使用的堆外内存值，会 check 当前申请的大小与已经使用的内存大小是否超过总的堆外内存大小（默认大小与堆内存差不多，其实是有细微区别的，拿 CMS GC 来举例，它的大小是新生代的最大值 - 一个 survivor 的大小 + 老生代的最大值），可以使用 -XX:MaxDirectMemorySize 参数指定堆外内存最大大小。
+// DirectByteBuffer(int cap) { // package-private super(-1, 0, cap, cap); boolean pa = VM.isDirectMemoryPageAligned(); int ps = Bits.pageSize(); long size = Math.max(1L, (long)cap + (pa ? ps : 0)); Bits.",
+        "inLanguage" : "zh",
+        "author" : "",
+        "creator" : "",
+        "publisher": "",
+        "accountablePerson" : "",
+        "copyrightHolder" : "",
+        "copyrightYear" : "2017",
+        "datePublished": "2017-04-13 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2017-04-13 00:00:00 &#43;0000 UTC",
+        "url" : "https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/",
+        "wordCount" : "867",
+        "keywords" : [ "Java","GC","JVM","堆外内存","Blog" ]
+    }
+    </script>
+        
+            
+                <title>Java 堆外内存回收原理</title>
+            
+        
+
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content="Hugo 0.54.0" />
+        
+
+
+        
+            <meta name="author" content="涤生">
+        
+        
+            
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。">
+            
+        
+
+        <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Java 堆外内存回收原理"/>
+<meta name="twitter:description" content="DirectByteBuffer 简介 DirectByteBuffer 这个类是 JDK 提供使用堆外内存的一种途径，当然常见的业务开发一般不会接触到，即使涉及到也可能是框架（如 Netty、RPC 等）使用的，对框架使用者来说也是透明的。
+堆外内存的优势 堆外内存优势在 IO 操作上，对于网络 IO，使用 Socket 发送数据时，能够节省堆内存到堆外内存的数据拷贝，所以性能更高。看过 Netty 源码的同学应该了解，Netty 使用堆外内存池来实现零拷贝技术。对于磁盘 IO 时，也可以使用内存映射，来提升性能。 另外，更重要的几乎不用考虑堆内存烦人的 GC 问题。
+堆外内存的创建 我们直接来看代码，首先向 Bits 类申请额度，Bits 类内部维护着当前已经使用的堆外内存值，会 check 当前申请的大小与已经使用的内存大小是否超过总的堆外内存大小（默认大小与堆内存差不多，其实是有细微区别的，拿 CMS GC 来举例，它的大小是新生代的最大值 - 一个 survivor 的大小 &#43; 老生代的最大值），可以使用 -XX:MaxDirectMemorySize 参数指定堆外内存最大大小。
+// DirectByteBuffer(int cap) { // package-private super(-1, 0, cap, cap); boolean pa = VM.isDirectMemoryPageAligned(); int ps = Bits.pageSize(); long size = Math.max(1L, (long)cap &#43; (pa ? ps : 0)); Bits."/>
+
+        <meta property="og:title" content="Java 堆外内存回收原理" />
+<meta property="og:description" content="DirectByteBuffer 简介 DirectByteBuffer 这个类是 JDK 提供使用堆外内存的一种途径，当然常见的业务开发一般不会接触到，即使涉及到也可能是框架（如 Netty、RPC 等）使用的，对框架使用者来说也是透明的。
+堆外内存的优势 堆外内存优势在 IO 操作上，对于网络 IO，使用 Socket 发送数据时，能够节省堆内存到堆外内存的数据拷贝，所以性能更高。看过 Netty 源码的同学应该了解，Netty 使用堆外内存池来实现零拷贝技术。对于磁盘 IO 时，也可以使用内存映射，来提升性能。 另外，更重要的几乎不用考虑堆内存烦人的 GC 问题。
+堆外内存的创建 我们直接来看代码，首先向 Bits 类申请额度，Bits 类内部维护着当前已经使用的堆外内存值，会 check 当前申请的大小与已经使用的内存大小是否超过总的堆外内存大小（默认大小与堆内存差不多，其实是有细微区别的，拿 CMS GC 来举例，它的大小是新生代的最大值 - 一个 survivor 的大小 &#43; 老生代的最大值），可以使用 -XX:MaxDirectMemorySize 参数指定堆外内存最大大小。
+// DirectByteBuffer(int cap) { // package-private super(-1, 0, cap, cap); boolean pa = VM.isDirectMemoryPageAligned(); int ps = Bits.pageSize(); long size = Math.max(1L, (long)cap &#43; (pa ? ps : 0)); Bits." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/" />
+<meta property="article:published_time" content="2017-04-13T00:00:00&#43;00:00"/>
+<meta property="article:modified_time" content="2017-04-13T00:00:00&#43;00:00"/>
+
+        <meta property="og:image" content="https://andyyin.github.io/images/logo.png">
+        <meta property="og:image:type" content="image/png">
+        <meta property="og:image:width" content="512">
+        <meta property="og:image:height" content="512">
+        
+<meta itemprop="name" content="Java 堆外内存回收原理">
+<meta itemprop="description" content="DirectByteBuffer 简介 DirectByteBuffer 这个类是 JDK 提供使用堆外内存的一种途径，当然常见的业务开发一般不会接触到，即使涉及到也可能是框架（如 Netty、RPC 等）使用的，对框架使用者来说也是透明的。
+堆外内存的优势 堆外内存优势在 IO 操作上，对于网络 IO，使用 Socket 发送数据时，能够节省堆内存到堆外内存的数据拷贝，所以性能更高。看过 Netty 源码的同学应该了解，Netty 使用堆外内存池来实现零拷贝技术。对于磁盘 IO 时，也可以使用内存映射，来提升性能。 另外，更重要的几乎不用考虑堆内存烦人的 GC 问题。
+堆外内存的创建 我们直接来看代码，首先向 Bits 类申请额度，Bits 类内部维护着当前已经使用的堆外内存值，会 check 当前申请的大小与已经使用的内存大小是否超过总的堆外内存大小（默认大小与堆内存差不多，其实是有细微区别的，拿 CMS GC 来举例，它的大小是新生代的最大值 - 一个 survivor 的大小 &#43; 老生代的最大值），可以使用 -XX:MaxDirectMemorySize 参数指定堆外内存最大大小。
+// DirectByteBuffer(int cap) { // package-private super(-1, 0, cap, cap); boolean pa = VM.isDirectMemoryPageAligned(); int ps = Bits.pageSize(); long size = Math.max(1L, (long)cap &#43; (pa ? ps : 0)); Bits.">
+
+
+<meta itemprop="datePublished" content="2017-04-13T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2017-04-13T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="867">
+
+
+
+<meta itemprop="keywords" content="Java,GC,JVM,堆外内存," />
+
+        
+
+        
+            
+        
+
+        
+        
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:400,800,900|Source+Sans+Pro:400,700">
+            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/main.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/add-on.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/academicons.min.css">
+        
+
+        
+            
+                
+            
+        
+
+
+  
+    
+    <link href='//cdn.bootcss.com/highlight.js/9.11.0/styles/github.min.css' rel='stylesheet' type='text/css' />
+  
+
+
+      
+    </head>
+    <body>
+
+      
+      <div id="wrapper">
+
+    
+    
+<header id="header">
+    
+      <h1><a href="https://andyyin.github.io/">涤生|个人博客</a></h1>
+    
+
+    <nav class="links">
+        <ul>
+            
+                <li>
+                    <a href="https://andyyin.github.io/">
+                            <i class="fa fa-home">&nbsp;</i>主页
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/blog/">
+                            <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/categories/">
+                            <i class="fa fa-sitemap">&nbsp;</i>分类
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/about/">
+                            <i class="fa fa-id-card-o">&nbsp;</i>关于
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/links/">
+                            <i class="fa fa-link">&nbsp;</i>友链
+                    </a>
+                </li>
+            
+        </ul>
+    </nav>
+    <nav class="main">
+        <ul>
+            
+            <li id="share-nav" class="share-menu" style="display:none;">
+                <a class="fa-share-alt" href="#share-menu">Share</a>
+            </li>
+            
+            <li class="search">
+                <a class="fa-search" href="#search">Search</a>
+                <form id="search" method="get" action="//google.com/search">
+                    <input type="text" name="q" placeholder="Search" />
+                    <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+                </form>
+            </li>
+            <li class="menu">
+                <a class="fa-bars" href="#menu">Menu</a>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+
+<section id="menu">
+
+    
+        <section>
+            <form class="search" method="get" action="//google.com/search">
+                <input type="text" name="q" placeholder="Search" />
+                <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+            </form>
+        </section>
+
+    
+        <section>
+            <ul class="links">
+                
+                    <li>
+                        <a href="https://andyyin.github.io/">
+                            <h3>
+                                <i class="fa fa-home">&nbsp;</i>主页
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/blog/">
+                            <h3>
+                                <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/categories/">
+                            <h3>
+                                <i class="fa fa-sitemap">&nbsp;</i>分类
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/about/">
+                            <h3>
+                                <i class="fa fa-id-card-o">&nbsp;</i>关于
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/links/">
+                            <h3>
+                                <i class="fa fa-link">&nbsp;</i>友链
+                            </h3>
+                        </a>
+                    </li>
+                
+            </ul>
+        </section>
+
+    
+        <section class="recent-posts">
+            <div class="mini-posts">
+                <header>
+                    <h3>Recent Posts</h3>
+                </header>
+                
+
+                
+                    
+                
+
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-06-07'>
+                                    June 7, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-19'>
+                                    May 19, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-09'>
+                                    May 9, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-21'>
+                                    April 21, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-15'>
+                                    April 15, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+
+                
+                    <a href=
+                        
+                            /blog/
+                        
+                        class="button">更多</a>
+                
+            </div>
+        </section>
+
+    
+        
+</section>
+
+    <section id="share-menu">
+    <section id="social-share-nav">
+        <ul class="links">
+            <header>
+                <h3>Share this post <i class="fa fa-smile-o"></i></h3>
+            </header>
+            
+
+
+
+<li>
+  <a href="//twitter.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2fjava-%25E5%25A0%2586%25E5%25A4%2596%25E5%2586%2585%25E5%25AD%2598%25E5%259B%259E%25E6%2594%25B6%25E5%258E%259F%25E7%2590%2586%2f&amp;text=Java%20%e5%a0%86%e5%a4%96%e5%86%85%e5%ad%98%e5%9b%9e%e6%94%b6%e5%8e%9f%e7%90%86&amp;via=" target="_blank" class="share-btn twitter">
+    <i class="fa fa-twitter"></i>
+    <p>Twitter</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//plus.google.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2fjava-%25E5%25A0%2586%25E5%25A4%2596%25E5%2586%2585%25E5%25AD%2598%25E5%259B%259E%25E6%2594%25B6%25E5%258E%259F%25E7%2590%2586%2f" target="_blank" class="share-btn google-plus">
+    <i class="fa fa-google-plus"></i>
+    <p>Google+</p>
+  </a>
+</li>
+
+
+
+
+
+<li>
+  <a href="//www.facebook.com/sharer/sharer.php?u=https%3a%2f%2fandyyin.github.io%2fblog%2fjava-%25E5%25A0%2586%25E5%25A4%2596%25E5%2586%2585%25E5%25AD%2598%25E5%259B%259E%25E6%2594%25B6%25E5%258E%259F%25E7%2590%2586%2f" target="_blank" class="share-btn facebook">
+    <i class="fa fa-facebook"></i>
+    <p>Facebook</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//reddit.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2fjava-%25E5%25A0%2586%25E5%25A4%2596%25E5%2586%2585%25E5%25AD%2598%25E5%259B%259E%25E6%2594%25B6%25E5%258E%259F%25E7%2590%2586%2f&amp;title=Java%20%e5%a0%86%e5%a4%96%e5%86%85%e5%ad%98%e5%9b%9e%e6%94%b6%e5%8e%9f%e7%90%86" target="_blank" class="share-btn reddit">
+    <i class="fa fa-reddit-alien"></i>
+    <p>Reddit</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.linkedin.com/shareArticle?url=https%3a%2f%2fandyyin.github.io%2fblog%2fjava-%25E5%25A0%2586%25E5%25A4%2596%25E5%2586%2585%25E5%25AD%2598%25E5%259B%259E%25E6%2594%25B6%25E5%258E%259F%25E7%2590%2586%2f&amp;title=Java%20%e5%a0%86%e5%a4%96%e5%86%85%e5%ad%98%e5%9b%9e%e6%94%b6%e5%8e%9f%e7%90%86" target="_blank" class="share-btn linkedin">
+      <i class="fa fa-linkedin"></i>
+      <p>LinkedIn</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.stumbleupon.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2fjava-%25E5%25A0%2586%25E5%25A4%2596%25E5%2586%2585%25E5%25AD%2598%25E5%259B%259E%25E6%2594%25B6%25E5%258E%259F%25E7%2590%2586%2f&amp;title=Java%20%e5%a0%86%e5%a4%96%e5%86%85%e5%ad%98%e5%9b%9e%e6%94%b6%e5%8e%9f%e7%90%86" target="_blank" class="share-btn stumbleupon">
+    <i class="fa fa-stumbleupon"></i>
+    <p>StumbleUpon</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.pinterest.com/pin/create/button/?url=https%3a%2f%2fandyyin.github.io%2fblog%2fjava-%25E5%25A0%2586%25E5%25A4%2596%25E5%2586%2585%25E5%25AD%2598%25E5%259B%259E%25E6%2594%25B6%25E5%258E%259F%25E7%2590%2586%2f&amp;description=Java%20%e5%a0%86%e5%a4%96%e5%86%85%e5%ad%98%e5%9b%9e%e6%94%b6%e5%8e%9f%e7%90%86" target="_blank" class="share-btn pinterest">
+    <i class="fa fa-pinterest-p"></i>
+    <p>Pinterest</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="mailto:?subject=Check out this post by %e6%b6%a4%e7%94%9f&amp;body=https%3a%2f%2fandyyin.github.io%2fblog%2fjava-%25E5%25A0%2586%25E5%25A4%2596%25E5%2586%2585%25E5%25AD%2598%25E5%259B%259E%25E6%2594%25B6%25E5%258E%259F%25E7%2590%2586%2f" target="_blank" class="share-btn email">
+    <i class="fa fa-envelope"></i>
+    <p>Email</p>
+  </a>
+</li>
+
+
+        </ul>
+    </section>
+</section>
+
+    
+    <div id="main">
+        
+        
+        <article class="post">
+  <header>
+    <div class="title">
+        
+            <h1><a href="https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/">Java 堆外内存回收原理</a></h1>
+            
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2017-04-13'>
+            2017-04-13</time>
+        <span class="author">涤生</span>
+        
+            <p>5 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+
+  
+
+  
+
+  <div id="content">
+    
+
+<h1 id="directbytebuffer-简介">DirectByteBuffer 简介</h1>
+
+<p>DirectByteBuffer 这个类是 JDK 提供使用堆外内存的一种途径，当然常见的业务开发一般不会接触到，即使涉及到也可能是框架（如 Netty、RPC 等）使用的，对框架使用者来说也是透明的。</p>
+
+<h1 id="堆外内存的优势">堆外内存的优势</h1>
+
+<p>堆外内存优势在 IO 操作上，对于网络 IO，使用 Socket 发送数据时，能够节省堆内存到堆外内存的数据拷贝，所以性能更高。看过 Netty 源码的同学应该了解，Netty 使用堆外内存池来实现零拷贝技术。对于磁盘 IO 时，也可以使用内存映射，来提升性能。
+另外，更重要的几乎不用考虑堆内存烦人的 GC 问题。</p>
+
+<h1 id="堆外内存的创建">堆外内存的创建</h1>
+
+<p>我们直接来看代码，首先向 Bits 类申请额度，Bits 类内部维护着当前已经使用的堆外内存值，会 check 当前申请的大小与已经使用的内存大小是否超过总的堆外内存大小（默认大小与堆内存差不多，其实是有细微区别的，拿 CMS GC 来举例，它的大小是新生代的最大值 - 一个 survivor 的大小 + 老生代的最大值），可以使用 -XX:MaxDirectMemorySize 参数指定堆外内存最大大小。</p>
+
+<pre><code class="language-java">   //
+    DirectByteBuffer(int cap) {                   // package-private
+
+        super(-1, 0, cap, cap);
+        boolean pa = VM.isDirectMemoryPageAligned();
+        int ps = Bits.pageSize();
+        long size = Math.max(1L, (long)cap + (pa ? ps : 0));
+        Bits.reserveMemory(size, cap);
+
+        long base = 0;
+        try {
+            base = unsafe.allocateMemory(size);
+        } catch (OutOfMemoryError x) {
+            Bits.unreserveMemory(size, cap);
+            throw x;
+        }
+        unsafe.setMemory(base, size, (byte) 0);
+        if (pa &amp;&amp; (base % ps != 0)) {
+            // Round up to page boundary
+            address = base + ps - (base &amp; (ps - 1));
+        } else {
+            address = base;
+        }
+        cleaner = Cleaner.create(this, new Deallocator(base, size, cap));
+        att = null;
+
+    }
+
+</code></pre>
+
+<p>如果 check 不通过，会主动执行 System.gc()，然后 sleep 100 毫秒，再进行 check，如果内存还是不足，就抛出 OOM Error。</p>
+
+<p>如果 check 通过，就会调用 unsafe.allocateMemory 真正分配内存，返回内存地址，然后再将内存清 0。题外话，这个 unsafe 命名看着是不是很吓人，这个 unsafe 不是说不安全，而是 JDK 内部使用的类，不推荐外部使用，所以叫 unsafe，Netty 源码内部也有类似命名。</p>
+
+<p>由于申请内存前可能会调用 System.gc()，所以谨慎设置 -XX:+DisableExplicitGC 这个选项，这个参数作用是禁止代码中显示触发的 Full GC。</p>
+
+<h1 id="堆外内存的回收">堆外内存的回收</h1>
+
+<pre><code class="language-java">cleaner = Cleaner.create(this, new Deallocator(base, size, cap));
+</code></pre>
+
+<p>看到这段代码从成员的命名上就应该知道，是用来回收堆外内存的。确实，但是它是如何工作的呢？接下来我们看看 Cleaner 类。</p>
+
+<pre><code class="language-java">public class Cleaner extends PhantomReference {
+    private static final ReferenceQueue dummyQueue = new ReferenceQueue();
+    private static Cleaner first = null;
+    private Cleaner next = null;
+    private Cleaner prev = null;
+    private final Runnable thunk;
+
+    private static synchronized Cleaner add(Cleaner var0) {
+       ...
+    }
+
+    private static synchronized boolean remove(Cleaner var0) {
+        ...
+    }
+
+    private Cleaner(Object var1, Runnable var2) {
+        super(var1, dummyQueue);
+        this.thunk = var2;
+    }
+
+    public static Cleaner create(Object var0, Runnable var1) {
+        return var1 == null?null:add(new Cleaner(var0, var1));
+    }
+
+    public void clean() {
+        if(remove(this)) {
+            try {
+                this.thunk.run();
+            } catch (final Throwable var2) {
+                AccessController.doPrivileged(new PrivilegedAction() {
+                    public Void run() {
+                        if(System.err != null) {
+                            (new Error(&quot;Cleaner terminated abnormally&quot;, var2)).printStackTrace();
+                        }
+
+                        System.exit(1);
+                        return null;
+                    }
+                });
+            }
+
+        }
+    }
+}
+
+</code></pre>
+
+<p>Cleaner 类，内部维护了一个 Cleaner 对象的链表，通过 create(Object, Runnable) 方法创建 cleaner 对象，调用自身的 add 方法，将其加入到链表中。
+更重要的是提供了 clean 方法，clean 方法首先将对象自身从链表中删除，保证只调用一次，然后执行 this.thunk 的 run 方法，thunk 就是由创建时传入的 Runnable 参数，也就是说 clean 只负责触发 Runnable 的 run 方法，至于 Runnable 做什么任务它不关心。</p>
+
+<p>那 DirectByteBuffer 传进来的 Runnable是什么呢？</p>
+
+<pre><code class="language-java"> private static class Deallocator
+        implements Runnable
+    {
+
+        private static Unsafe unsafe = Unsafe.getUnsafe();
+
+        private long address;
+        private long size;
+        private int capacity;
+
+        private Deallocator(long address, long size, int capacity) {
+            assert (address != 0);
+            this.address = address;
+            this.size = size;
+            this.capacity = capacity;
+        }
+
+        public void run() {
+            if (address == 0) {
+                // Paranoia
+                return;
+            }
+            unsafe.freeMemory(address);
+            address = 0;
+            Bits.unreserveMemory(size, capacity);
+        }
+
+    }
+</code></pre>
+
+<p>Deallocator 类的对象就是 DirectByteBuffer 中的 cleaner 传进来的 Runnable 参数类，我们直接看 run 方法 unsafe.freeMemory 释放内存，然后更新 Bits 里已使用的内存数据。</p>
+
+<p>接下来我们关注各个环节是如何串起来的？这里主要讲两种回收方式：一种是自动回收，一种是手动回收。</p>
+
+<h2 id="如何自动回收">如何自动回收？</h2>
+
+<p>Java 是不用用户去管理内存的，所以 Java 对堆外内存 默认是自动回收的。
+它是 由 GC 模块负责的，在 GC 时会扫描 DirectByteBuffer 对象是否有有效引用指向该对象，如没有，在回收 DirectByteBuffer 对象的同时且会回收其占用的堆外内存。但是 JVM 如何释放其占用的堆外内存呢？如何跟 Cleaner 关联起来呢？</p>
+
+<p>这得从 Cleaner 继承了 PhantomReference（虚引用） 说起。说到 Reference，还有 SoftReference、WeakReference、FinalReference 他们作用各不相同，这里就不展开说了。</p>
+
+<p>简单介绍 PhantomReference，首先虚引用是不会影响 JVM 去回收其指向的对象，当 GC 某个对象时，如果有此对象上还有虚引用对其引用，会将 PhantomReference 对象插入 ReferenceQueue 队列。</p>
+
+<p>PhantomReference插入到哪个队列呢？
+看 PhantomReference 类代码，其继承自 Reference，Reference 对象有个 ReferenceQueue 成员，这个也就是 PhantomReference 对象插入的 ReferenceQueue 队列，此成员如果不由外部传入就是 ReferenceQueue.NULL。如果需要通过 queue 拿到 PhantomReference 对象，这个 ReferenceQueue 对象还是必须由外部传入。</p>
+
+<pre><code class="language-java">private static final ReferenceQueue dummyQueue = new ReferenceQueue();
+
+private Cleaner(Object var1, Runnable var2) {
+        super(var1, dummyQueue);
+        this.thunk = var2;
+}
+
+</code></pre>
+
+<pre><code class="language-java">public class PhantomReference&lt;T&gt; extends Reference&lt;T&gt; {
+</code></pre>
+
+<p>Reference 类内部 static 静态块会启动 ReferenceHandler 线程，线程优先级很高，这个线程是用来处理 JVM 在 GC 过程中交接过来的 reference。想必经常用 jstack 命令，看线程堆栈的同学应该见到过这个线程。</p>
+
+<pre><code class="language-java">
+public abstract class Reference&lt;T&gt; {
+
+   
+    private T referent;         /* Treated specially by GC */
+
+    ReferenceQueue&lt;? super T&gt; queue;
+
+    Reference next;
+    transient private Reference&lt;T&gt; discovered;  /* used by VM */
+
+    static private class Lock { };
+    private static Lock lock = new Lock();
+    private static Reference pending = null;
+    
+    ...
+
+    static {
+        ThreadGroup tg = Thread.currentThread().getThreadGroup();
+        for (ThreadGroup tgn = tg;
+             tgn != null;
+             tg = tgn, tgn = tg.getParent());
+        Thread handler = new ReferenceHandler(tg, &quot;Reference Handler&quot;);
+        /* If there were a special system-only priority greater than
+         * MAX_PRIORITY, it would be used here
+         */
+        handler.setPriority(Thread.MAX_PRIORITY);
+        handler.setDaemon(true);
+        handler.start();
+    }
+
+    public T get() {
+        return this.referent;
+    }
+
+    public void clear() {
+        this.referent = null;
+    }
+
+    public boolean isEnqueued() {
+            synchronized (this) {
+            return (this.queue != ReferenceQueue.NULL) &amp;&amp; (this.next != null);
+        }
+    }
+
+  
+    public boolean enqueue() {
+        return this.queue.enqueue(this);
+    }
+
+
+    /* -- Constructors -- */
+
+    Reference(T referent) {
+        this(referent, null);
+    }
+
+    Reference(T referent, ReferenceQueue&lt;? super T&gt; queue) {
+        this.referent = referent;
+        this.queue = (queue == null) ? ReferenceQueue.NULL : queue;
+    }
+
+}
+
+</code></pre>
+
+<p>我们来看看 ReferenceHandler 是如何处理的？
+直接看 run 方法，首先是个死循环，一直在那不停的干活，synchronized 块内的这段主要是交接 JVM 扔过来的 reference（就是 pending），再往下看，很明显，调用了 cleaner 的 clean 方法。调完之后直接 continue 结束此次循环，这个 reference 并没有进入 queue，也就是说 Cleaner 虚引用是不放入 ReferenceQueue。</p>
+
+<pre><code class="language-java">/* High-priority thread to enqueue pending References
+     */
+    private static class ReferenceHandler extends Thread {
+
+        ReferenceHandler(ThreadGroup g, String name) {
+            super(g, name);
+        }
+
+        public void run() {
+            for (;;) {
+
+                Reference r;
+                synchronized (lock) {
+                    if (pending != null) {
+                        r = pending;
+                        Reference rn = r.next;
+                        pending = (rn == r) ? null : rn;
+                        r.next = r;
+                    } else {
+                        try {
+                            lock.wait();
+                        } catch (InterruptedException x) { }
+                        continue;
+                    }
+                }
+
+                // Fast path for cleaners
+                if (r instanceof Cleaner) {
+                    ((Cleaner)r).clean();
+                    continue;
+                }
+
+                ReferenceQueue q = r.queue;
+                if (q != ReferenceQueue.NULL) q.enqueue(r);
+            }
+        }
+    }
+</code></pre>
+
+<p>这块有点想不通，既然不放入 ReferenceQueue，为什么 Cleaner 类还是初始化了这个 ReferenceQueue。</p>
+
+<h2 id="如何手动回收">如何手动回收？</h2>
+
+<p>手动回收，就是由开发手动调用 DirectByteBuffer 的 cleaner 的 clean 方法来释放空间。由于 cleaner 是 private 反问权限，所以自然想到使用反射来实现。</p>
+
+<pre><code class="language-java">public static void clean(final ByteBuffer byteBuffer) {  
+ if (byteBuffer.isDirect()) { 
+        Field cleanerField = byteBuffer.getClass().getDeclaredField(&quot;cleaner&quot;);
+        cleanerField.setAccessible(true);
+        Cleaner cleaner = (Cleaner) cleanerField.get(byteBuffer);
+        cleaner.clean();
+    }
+}
+</code></pre>
+
+<p>还有另一种方法，DirectByteBuffer 实现了 DirectBuffer 接口，这个接口有 cleaner 方法可以获取 cleaner 对象。</p>
+
+<pre><code class="language-java">public static void clean(final ByteBuffer byteBuffer) {  
+    if (byteBuffer.isDirect()) {  
+        ((DirectBuffer)byteBuffer).cleaner().clean();  
+    }  
+}
+</code></pre>
+
+<p>Netty 中的堆外内存池就是使用反射来实现手动回收方式进行回收的。</p>
+
+<hr />
+
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
+<p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
+
+<p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
+
+  </div>
+
+  <footer>
+    <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/jvm">JVM</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98">堆外内存</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+
+</article>
+
+<ul class="actions pagination">
+    
+
+    
+        <li><a href="https://andyyin.github.io/blog/%E9%95%BF%E8%BF%9E%E6%8E%A5%E5%92%8C%E5%BF%83%E8%B7%B3%E7%9A%84%E9%82%A3%E4%BA%9B%E4%BA%8B%E5%84%BF/"
+                class="button big next">长连接和心跳的那些事儿</a></li>
+    
+</ul>
+
+
+    </div>
+    
+<section id="sidebar">
+
+  
+  <section id="intro">
+    
+    
+      
+        <a href='https://andyyin.github.io/'><img src="https://andyyin.github.io/img/main/disheng.jpg" class="intro-circle" width="100" alt="涤生的博客" /></a>
+      
+    
+    
+      <header>
+        <h2>涤生的博客</h2>
+        <p>主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      </header>
+    
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+  </section>
+
+  
+  <section class="recent-posts">
+    <div class="mini-posts">
+      <header>
+        <h3>最新文章</h3>
+      </header>
+      <div class="posts-container">
+        
+
+        
+          
+        
+
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a>
+              </h3>
+              
+              <time class="published" datetime='2019-06-07'>
+                2019-06-07
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-19'>
+                2019-05-19
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-09'>
+                2019-05-09
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-21'>
+                2019-04-21
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-15'>
+                2019-04-15
+              </time>
+            </header>
+            
+
+          </article>
+        
+      </div>
+
+      
+        <a href=
+          
+            /blog/
+          
+        class="button">更多</a>
+      
+    </div>
+  </section>
+
+  
+  
+  
+  
+  
+    <section id="categories">
+      <header>
+        <h3>
+          <a href="https://andyyin.github.io/categories/">分类</a>
+        </h3>
+      </header>
+        
+          
+        
+
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">11</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">10</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/jvm/">JVM</a>
+                <span style="float:right;">8</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/zookeeper/">Zookeeper</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1/">系统设计</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+    </section>
+  
+  
+
+  
+  
+    <section id="mini-bio">
+      <h3>关于我</h3>
+      <p>涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。 </p>
+      <a href="https://andyyin.github.io/about/" class="button">了解更多</a>
+    </section>
+  
+
+  
+  <section id="footer">
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+    <p class="copyright">
+      
+        &copy; 2019
+        
+          涤生的博客
+        
+      .
+      Powered by <a href="https://andyyin.github.io/" target="_blank">涤生</a>
+    </p>
+  </section>
+</section>
+
+    </div>
+    <a id="back-to-top" href="#" class="fa fa-arrow-up fa-border fa-2x"></a>
+    
+
+    
+      
+    
+
+    
+      
+      
+      
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/highlight.min.js"></script>
+        
+        
+        
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/r.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/yaml.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/css.min.js"></script>
+        <script>hljs.configure({languages: []}); hljs.initHighlightingOnLoad();</script>
+      
+    
+    
+    
+      <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/skel/3.0.1/skel.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.js"></script>
+      <script src="https://andyyin.github.io/js/util.js"></script>
+      <script src="https://andyyin.github.io/js/main.js"></script>
+      <script src="https://andyyin.github.io/js/backToTop.js"></script>
+    
+
+    
+      
+        
+      
+    
+
+    
+    <script>hljs.initHighlightingOnLoad();</script>
+      <script src="//yihui.name/js/math-code.js"></script>
+<script async
+src="//cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+  </body>
+</html>
+

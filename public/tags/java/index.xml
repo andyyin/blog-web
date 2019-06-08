@@ -126,5 +126,34 @@ Metaspace 的使用也会触发 CMS GC 吗？
  Old Gen 使用达到一定的比率，默认为 92%，这里看 CMSInitiatingOccupancyFraction=80%，而实际才使用 2%（看监控图表）不到，所以排除这种情况。 配置了 CMSClassUnloadingEnabled，且 Perm Gen 的使用达到一定的比率默认为 92%，这里看 CMSInitiatingPermOccupancyFraction=80%，而实际才使用 30％（看监控图表）不到，所以排除这种情况。 配置了 ExplictGCInvokesConcurrent 且未配置 DisableExplicitGC 的情况下显示调用了 System.</description>
     </item>
     
+    <item>
+      <title>长连接和心跳的那些事儿</title>
+      <link>https://andyyin.github.io/blog/%E9%95%BF%E8%BF%9E%E6%8E%A5%E5%92%8C%E5%BF%83%E8%B7%B3%E7%9A%84%E9%82%A3%E4%BA%9B%E4%BA%8B%E5%84%BF/</link>
+      <pubDate>Sun, 30 Jul 2017 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E9%95%BF%E8%BF%9E%E6%8E%A5%E5%92%8C%E5%BF%83%E8%B7%B3%E7%9A%84%E9%82%A3%E4%BA%9B%E4%BA%8B%E5%84%BF/</guid>
+      <description>介绍  长连接  首先这里所说的连接是指网络传输层的使用 TCP 协议经过三次握手建立的连接；长连接是指建立的连接长期保持，不管此时有无数据包的发送；有长连接自然也有短连接，短连接是指双方有数据发送时，就建立连接，发送几次请求后，就主动或者被动断开连接。
+ 心跳  心跳这个名字比较形象，就像人体心跳一样，是用来检测一个系统是否存活或者网络链路是否通畅的一种方式，其一般做法是定时向被检测系统发送心跳包，被检测系统收到心跳包进行回复，收到回复说明对方存活。
+心跳和长连接在一起介绍的原因是，心跳能够给长连接提供保活功能，能够检测长连接是否正常（这里所说的保活不能简单的理解为保证活着，具体来说应该是一旦链路死了，不可用了，能够尽快知道，然后做些其他的高可用措施，来保证系统的正常运行）。
+优势 长连接的优势
+ 减少连接建立过程的耗时  大家都知道 TCP 连接建立需要三次握手，三次握手也就说需要三次交互才能建立一个连接通道，同城的机器之间的大概是ms级别的延时，影响还不大，如果是北京和上海两地机房，走专线一来一回大概需要30ms，如果使用长连接，这个优化还是十分可观的。
+ 方便实现 push 数据  数据交互－推模式实现的前提是网络长连接，有了长连接，连接两端很方便的互相push数据，来进行交互。
+疑问  TCP 连接到底是什么？  所谓的 TCP 连接不是物理的连接，是为了实现数据的可靠传输由通信双方进行三次握手交互而建立的逻辑上的连接，通信双方都需要维护这样的连接状态信息。比如 netstat 经常看到连接的状态为 ESTABLISHED，表示当前处于连接状态。（这里需要注意的是这个 ESTABLISHED 的连接状态只是操作系统认为当前还处在连接状态）
+ 是不是建立了长连接，就可以高枕无忧了呢？  建立好长连接，两端的操作系统都维护了连接已经建立的状态，是不是这时向对端发送数据一定能到达呢？ 答案是否定的。 可能此时链路已经不通，只是 TCP 层还没有感知到这一信息，操作系统层面显示的状态依然是连接状态，而且因为 TCP 层还认为连接是 ESTABLISHED，所以作为应用层自然也就无法感知当前的链路不通。 这种情况会导致什么问题？ 如果此时有数据想要传输，显然，数据是无法传送到对端，但是 TCP 协议为了保证可靠性，会重传请求，如果问题只是网线接头松了，导致网络不通，此时如果及时将网线接头接好，数据还是能正常到达对端，且 TCP 的连接依然是 ESTABLISHED，不会有任何变化。但不是任何时候都这么巧，有时就是某段链路瘫痪了，或者主机挂了，系统异常关闭了等。这时候如果应用系统不能感知到，是件很危险的事情。
+ 长连接怎么保活？  TCP 协议实现中，是有保活机制的，也就是 TCP的 KeepAlive 机制（此机制并不是 TCP 协议规范中的内容，由操作系统去实现），KeepAlive 机制开启后，在一定时间内（一般时间为 7200s，参数 tcp_keepalive_time）在链路上没有数据传送的情况下，TCP 层将发送相应的 KeepAlive 探针以确定连接可用性，探测失败后重试 10（参数 tcp_keepalive_probes）次，每次间隔时间 75s（参数 tcp_keepalive_intvl），所有探测失败后，才认为当前连接已经不可用。这些参数是机器级别，可以调整。</description>
+    </item>
+    
+    <item>
+      <title>Java 堆外内存回收原理</title>
+      <link>https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/</link>
+      <pubDate>Thu, 13 Apr 2017 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/</guid>
+      <description>DirectByteBuffer 简介 DirectByteBuffer 这个类是 JDK 提供使用堆外内存的一种途径，当然常见的业务开发一般不会接触到，即使涉及到也可能是框架（如 Netty、RPC 等）使用的，对框架使用者来说也是透明的。
+堆外内存的优势 堆外内存优势在 IO 操作上，对于网络 IO，使用 Socket 发送数据时，能够节省堆内存到堆外内存的数据拷贝，所以性能更高。看过 Netty 源码的同学应该了解，Netty 使用堆外内存池来实现零拷贝技术。对于磁盘 IO 时，也可以使用内存映射，来提升性能。 另外，更重要的几乎不用考虑堆内存烦人的 GC 问题。
+堆外内存的创建 我们直接来看代码，首先向 Bits 类申请额度，Bits 类内部维护着当前已经使用的堆外内存值，会 check 当前申请的大小与已经使用的内存大小是否超过总的堆外内存大小（默认大小与堆内存差不多，其实是有细微区别的，拿 CMS GC 来举例，它的大小是新生代的最大值 - 一个 survivor 的大小 + 老生代的最大值），可以使用 -XX:MaxDirectMemorySize 参数指定堆外内存最大大小。
+// DirectByteBuffer(int cap) { // package-private super(-1, 0, cap, cap); boolean pa = VM.isDirectMemoryPageAligned(); int ps = Bits.pageSize(); long size = Math.max(1L, (long)cap + (pa ? ps : 0)); Bits.</description>
+    </item>
+    
   </channel>
 </rss>

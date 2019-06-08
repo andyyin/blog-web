@@ -49,16 +49,16 @@
         
         
             
-                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。">
             
         
 
         <meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="JVM"/>
-<meta name="twitter:description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注"/>
+<meta name="twitter:description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。"/>
 
         <meta property="og:title" content="JVM" />
-<meta property="og:description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注" />
+<meta property="og:description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://andyyin.github.io/tags/jvm/" />
 
@@ -70,7 +70,7 @@
         <meta property="og:image:height" content="512">
         
 <meta itemprop="name" content="JVM">
-<meta itemprop="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+<meta itemprop="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。">
 
 
         
@@ -905,6 +905,86 @@
 </article>
 
         
+            <article class="post">
+  <header>
+    <div class="title">
+        
+            <h2><a href="https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/">Java 堆外内存回收原理</a></h2>
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2017-04-13'>
+            2017-04-13</time>
+        <span class="author">涤生</span>
+        
+            <p>5 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+  
+
+  
+  <p>DirectByteBuffer 这个类是 JDK 提供使用堆外内存的一种途径，当然常见的业务开发一般不会接触到，即使涉及到也可能是框架（如 Netty、RPC 等）使用的，对框架使用者来说也是透明的。</p>
+  <footer>
+    <ul class="actions">
+      <li><a href="https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/" class="button big">阅读</a></li>
+    </ul>
+  <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/jvm">JVM</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98">堆外内存</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+</article>
+
+        
 
         
 <ul class="actions pagination">
@@ -1147,8 +1227,8 @@
           <article>
             <header>
               
-                <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">9</span>
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">11</span>
               
             </header>
           </article>
@@ -1158,8 +1238,8 @@
           <article>
             <header>
               
-                <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">9</span>
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">10</span>
               
             </header>
           </article>
@@ -1170,7 +1250,7 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/jvm/">JVM</a>
-                <span style="float:right;">7</span>
+                <span style="float:right;">8</span>
               
             </header>
           </article>
@@ -1200,6 +1280,17 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1/">系统设计</a>
                 <span style="float:right;">1</span>
               
             </header>

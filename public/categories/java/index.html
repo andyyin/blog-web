@@ -51,16 +51,16 @@
         
         
             
-                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。">
             
         
 
         <meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="Java"/>
-<meta name="twitter:description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注"/>
+<meta name="twitter:description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。"/>
 
         <meta property="og:title" content="Java" />
-<meta property="og:description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注" />
+<meta property="og:description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。" />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://andyyin.github.io/categories/java/" />
 
@@ -72,7 +72,7 @@
         <meta property="og:image:height" content="512">
         
 <meta itemprop="name" content="Java">
-<meta itemprop="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+<meta itemprop="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。">
 
 
         
@@ -1068,6 +1068,83 @@
 </article>
 
         
+            <article class="post">
+  <header>
+    <div class="title">
+        
+            <h2><a href="https://andyyin.github.io/blog/%E9%95%BF%E8%BF%9E%E6%8E%A5%E5%92%8C%E5%BF%83%E8%B7%B3%E7%9A%84%E9%82%A3%E4%BA%9B%E4%BA%8B%E5%84%BF/">长连接和心跳的那些事儿</a></h2>
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2017-07-30'>
+            2017-07-30</time>
+        <span class="author">涤生</span>
+        
+            <p>1 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+  
+
+  
+  <p>首先这里所说的连接是指网络传输层的使用 TCP 协议经过三次握手建立的连接；长连接是指建立的连接长期保持，不管此时有无数据包的发送；有长连接自然也有短连接，短连接是指双方有数据发送时，就建立连接，发送几次请求后，就主动或者被动断开连接。</p>
+  <footer>
+    <ul class="actions">
+      <li><a href="https://andyyin.github.io/blog/%E9%95%BF%E8%BF%9E%E6%8E%A5%E5%92%8C%E5%BF%83%E8%B7%B3%E7%9A%84%E9%82%A3%E4%BA%9B%E4%BA%8B%E5%84%BF/" class="button big">阅读</a></li>
+    </ul>
+  <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1">系统设计</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E5%BF%83%E8%B7%B3">心跳</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E9%95%BF%E9%93%BE%E6%8E%A5">长链接</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1">系统设计</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+</article>
+
+        
 
         
 <ul class="actions pagination">
@@ -1076,7 +1153,8 @@
     
 
     
-        <li><a href="#" class="disabled button big next">下一页</a></li>
+        <li><a href="https://andyyin.github.io/categories/java/page/2/"
+                class="button big next">下一页</a></li>
     
 </ul>
 
@@ -1310,8 +1388,8 @@
           <article>
             <header>
               
-                <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">9</span>
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">11</span>
               
             </header>
           </article>
@@ -1321,8 +1399,8 @@
           <article>
             <header>
               
-                <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">9</span>
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">10</span>
               
             </header>
           </article>
@@ -1333,7 +1411,7 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/jvm/">JVM</a>
-                <span style="float:right;">7</span>
+                <span style="float:right;">8</span>
               
             </header>
           </article>
@@ -1363,6 +1441,17 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1/">系统设计</a>
                 <span style="float:right;">1</span>
               
             </header>

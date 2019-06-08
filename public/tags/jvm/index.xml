@@ -102,5 +102,17 @@ Metaspace 的使用也会触发 CMS GC 吗？
  Old Gen 使用达到一定的比率，默认为 92%，这里看 CMSInitiatingOccupancyFraction=80%，而实际才使用 2%（看监控图表）不到，所以排除这种情况。 配置了 CMSClassUnloadingEnabled，且 Perm Gen 的使用达到一定的比率默认为 92%，这里看 CMSInitiatingPermOccupancyFraction=80%，而实际才使用 30％（看监控图表）不到，所以排除这种情况。 配置了 ExplictGCInvokesConcurrent 且未配置 DisableExplicitGC 的情况下显示调用了 System.</description>
     </item>
     
+    <item>
+      <title>Java 堆外内存回收原理</title>
+      <link>https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/</link>
+      <pubDate>Thu, 13 Apr 2017 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/</guid>
+      <description>DirectByteBuffer 简介 DirectByteBuffer 这个类是 JDK 提供使用堆外内存的一种途径，当然常见的业务开发一般不会接触到，即使涉及到也可能是框架（如 Netty、RPC 等）使用的，对框架使用者来说也是透明的。
+堆外内存的优势 堆外内存优势在 IO 操作上，对于网络 IO，使用 Socket 发送数据时，能够节省堆内存到堆外内存的数据拷贝，所以性能更高。看过 Netty 源码的同学应该了解，Netty 使用堆外内存池来实现零拷贝技术。对于磁盘 IO 时，也可以使用内存映射，来提升性能。 另外，更重要的几乎不用考虑堆内存烦人的 GC 问题。
+堆外内存的创建 我们直接来看代码，首先向 Bits 类申请额度，Bits 类内部维护着当前已经使用的堆外内存值，会 check 当前申请的大小与已经使用的内存大小是否超过总的堆外内存大小（默认大小与堆内存差不多，其实是有细微区别的，拿 CMS GC 来举例，它的大小是新生代的最大值 - 一个 survivor 的大小 + 老生代的最大值），可以使用 -XX:MaxDirectMemorySize 参数指定堆外内存最大大小。
+// DirectByteBuffer(int cap) { // package-private super(-1, 0, cap, cap); boolean pa = VM.isDirectMemoryPageAligned(); int ps = Bits.pageSize(); long size = Math.max(1L, (long)cap + (pa ? ps : 0)); Bits.</description>
+    </item>
+    
   </channel>
 </rss>

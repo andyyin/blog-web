@@ -68,6 +68,11 @@
   </url>
   
   <url>
+    <loc>https://andyyin.github.io/blog/%E9%95%BF%E8%BF%9E%E6%8E%A5%E5%92%8C%E5%BF%83%E8%B7%B3%E7%9A%84%E9%82%A3%E4%BA%9B%E4%BA%8B%E5%84%BF/</loc>
+    <lastmod>2017-07-30T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
     <loc>https://andyyin.github.io/itemized/item1/</loc>
     <lastmod>2017-06-22T00:00:00+00:00</lastmod>
   </url>
@@ -85,6 +90,11 @@
   <url>
     <loc>https://andyyin.github.io/itemized/item4/</loc>
     <lastmod>2017-06-22T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://andyyin.github.io/blog/java-%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E5%9B%9E%E6%94%B6%E5%8E%9F%E7%90%86/</loc>
+    <lastmod>2017-04-13T00:00:00+00:00</lastmod>
   </url>
   
   <url>
@@ -140,13 +150,13 @@
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/categories/gc/</loc>
+    <loc>https://andyyin.github.io/tags/gc/</loc>
     <lastmod>2019-06-07T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/tags/gc/</loc>
+    <loc>https://andyyin.github.io/categories/gc/</loc>
     <lastmod>2019-06-07T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
@@ -158,25 +168,25 @@
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/categories/jvm/</loc>
-    <lastmod>2019-06-07T00:00:00+00:00</lastmod>
-    <priority>0</priority>
-  </url>
-  
-  <url>
     <loc>https://andyyin.github.io/tags/jvm/</loc>
     <lastmod>2019-06-07T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/categories/java/</loc>
+    <loc>https://andyyin.github.io/categories/jvm/</loc>
     <lastmod>2019-06-07T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
   <url>
     <loc>https://andyyin.github.io/tags/java/</loc>
+    <lastmod>2019-06-07T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://andyyin.github.io/categories/java/</loc>
     <lastmod>2019-06-07T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
@@ -212,13 +222,13 @@
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/categories/zookeeper/</loc>
+    <loc>https://andyyin.github.io/tags/zookeeper/</loc>
     <lastmod>2019-05-19T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
   <url>
-    <loc>https://andyyin.github.io/tags/zookeeper/</loc>
+    <loc>https://andyyin.github.io/categories/zookeeper/</loc>
     <lastmod>2019-05-19T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
@@ -254,6 +264,18 @@
   </url>
   
   <url>
+    <loc>https://andyyin.github.io/tags/%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98/</loc>
+    <lastmod>2017-04-13T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://andyyin.github.io/tags/%E5%BF%83%E8%B7%B3/</loc>
+    <lastmod>2017-07-30T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
     <loc>https://andyyin.github.io/tags/%E6%84%8F%E8%AF%86/</loc>
     <lastmod>2019-04-15T00:00:00+00:00</lastmod>
     <priority>0</priority>
@@ -284,6 +306,18 @@
   </url>
   
   <url>
+    <loc>https://andyyin.github.io/tags/%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1/</loc>
+    <lastmod>2017-07-30T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://andyyin.github.io/categories/%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1/</loc>
+    <lastmod>2017-07-30T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
     <loc>https://andyyin.github.io/tags/%E8%BF%9B%E5%8F%96/</loc>
     <lastmod>2019-04-15T00:00:00+00:00</lastmod>
     <priority>0</priority>
@@ -292,6 +326,12 @@
   <url>
     <loc>https://andyyin.github.io/tags/%E9%83%A8%E7%BD%B2/</loc>
     <lastmod>2019-05-19T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://andyyin.github.io/tags/%E9%95%BF%E9%93%BE%E6%8E%A5/</loc>
+    <lastmod>2017-07-30T00:00:00+00:00</lastmod>
     <priority>0</priority>
   </url>
   
