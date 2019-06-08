@@ -1,0 +1,1199 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <script type="application/ld+json">
+    {
+        "@context" : "http://schema.org",
+        "@type" : "BlogPosting",
+        "mainEntityOfPage": {
+             "@type": "WebPage",
+             "@id": "https://andyyin.github.io"
+        },
+        "articleSection" : "blog",
+        "name" : "System.gc() 源码解读",
+        "headline" : "System.gc() 源码解读",
+        "description" : "介绍 System.gc()，大家应该也有所了解，是 JDK 提供的触发 Full GC 的一种方式，会触发 Full GC，其间会 stop the world，对业务影响较大，一般情况下不会直接使用。
+ 那它是如何实现的呢？ 另外有哪些参数可以进行优化呢？ 我们带着问题来对相关源码解读一下。
+ 实现 JDK实现 /** * Runs the garbage collector. * &lt;p&gt; * Calling the &lt;code&gt;gc&lt;/code&gt; method suggests that the Java Virtual * Machine expend effort toward recycling unused objects in order to * make the memory they currently occupy available for quick reuse. * When control returns from the method call, the Java Virtual * Machine has made a best effort to reclaim space from all discarded * objects.",
+        "inLanguage" : "zh",
+        "author" : "",
+        "creator" : "",
+        "publisher": "",
+        "accountablePerson" : "",
+        "copyrightHolder" : "",
+        "copyrightYear" : "2018",
+        "datePublished": "2018-01-14 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2018-01-14 00:00:00 &#43;0000 UTC",
+        "url" : "https://andyyin.github.io/blog/system.gc-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/",
+        "wordCount" : "698",
+        "keywords" : [ "Java","JVM","GC","System.gc()","Blog" ]
+    }
+    </script>
+        
+            
+                <title>System.gc() 源码解读</title>
+            
+        
+
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content="Hugo 0.54.0" />
+        
+
+
+        
+            <meta name="author" content="涤生">
+        
+        
+            
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+            
+        
+
+        <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="System.gc() 源码解读"/>
+<meta name="twitter:description" content="介绍 System.gc()，大家应该也有所了解，是 JDK 提供的触发 Full GC 的一种方式，会触发 Full GC，其间会 stop the world，对业务影响较大，一般情况下不会直接使用。
+ 那它是如何实现的呢？ 另外有哪些参数可以进行优化呢？ 我们带着问题来对相关源码解读一下。
+ 实现 JDK实现 /** * Runs the garbage collector. * &lt;p&gt; * Calling the &lt;code&gt;gc&lt;/code&gt; method suggests that the Java Virtual * Machine expend effort toward recycling unused objects in order to * make the memory they currently occupy available for quick reuse. * When control returns from the method call, the Java Virtual * Machine has made a best effort to reclaim space from all discarded * objects."/>
+
+        <meta property="og:title" content="System.gc() 源码解读" />
+<meta property="og:description" content="介绍 System.gc()，大家应该也有所了解，是 JDK 提供的触发 Full GC 的一种方式，会触发 Full GC，其间会 stop the world，对业务影响较大，一般情况下不会直接使用。
+ 那它是如何实现的呢？ 另外有哪些参数可以进行优化呢？ 我们带着问题来对相关源码解读一下。
+ 实现 JDK实现 /** * Runs the garbage collector. * &lt;p&gt; * Calling the &lt;code&gt;gc&lt;/code&gt; method suggests that the Java Virtual * Machine expend effort toward recycling unused objects in order to * make the memory they currently occupy available for quick reuse. * When control returns from the method call, the Java Virtual * Machine has made a best effort to reclaim space from all discarded * objects." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://andyyin.github.io/blog/system.gc-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/" />
+<meta property="article:published_time" content="2018-01-14T00:00:00&#43;00:00"/>
+<meta property="article:modified_time" content="2018-01-14T00:00:00&#43;00:00"/>
+
+        <meta property="og:image" content="https://andyyin.github.io/images/logo.png">
+        <meta property="og:image:type" content="image/png">
+        <meta property="og:image:width" content="512">
+        <meta property="og:image:height" content="512">
+        
+<meta itemprop="name" content="System.gc() 源码解读">
+<meta itemprop="description" content="介绍 System.gc()，大家应该也有所了解，是 JDK 提供的触发 Full GC 的一种方式，会触发 Full GC，其间会 stop the world，对业务影响较大，一般情况下不会直接使用。
+ 那它是如何实现的呢？ 另外有哪些参数可以进行优化呢？ 我们带着问题来对相关源码解读一下。
+ 实现 JDK实现 /** * Runs the garbage collector. * &lt;p&gt; * Calling the &lt;code&gt;gc&lt;/code&gt; method suggests that the Java Virtual * Machine expend effort toward recycling unused objects in order to * make the memory they currently occupy available for quick reuse. * When control returns from the method call, the Java Virtual * Machine has made a best effort to reclaim space from all discarded * objects.">
+
+
+<meta itemprop="datePublished" content="2018-01-14T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2018-01-14T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="698">
+
+
+
+<meta itemprop="keywords" content="Java,JVM,GC,System.gc()," />
+
+        
+
+        
+            
+        
+
+        
+        
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:400,800,900|Source+Sans+Pro:400,700">
+            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/main.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/add-on.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/academicons.min.css">
+        
+
+        
+            
+                
+            
+        
+
+
+  
+    
+    <link href='//cdn.bootcss.com/highlight.js/9.11.0/styles/github.min.css' rel='stylesheet' type='text/css' />
+  
+
+
+      
+    </head>
+    <body>
+
+      
+      <div id="wrapper">
+
+    
+    
+<header id="header">
+    
+      <h1><a href="https://andyyin.github.io/">涤生|个人博客</a></h1>
+    
+
+    <nav class="links">
+        <ul>
+            
+                <li>
+                    <a href="https://andyyin.github.io/">
+                            <i class="fa fa-home">&nbsp;</i>主页
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/blog/">
+                            <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/categories/">
+                            <i class="fa fa-sitemap">&nbsp;</i>分类
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/about/">
+                            <i class="fa fa-id-card-o">&nbsp;</i>关于
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/links/">
+                            <i class="fa fa-link">&nbsp;</i>友链
+                    </a>
+                </li>
+            
+        </ul>
+    </nav>
+    <nav class="main">
+        <ul>
+            
+            <li id="share-nav" class="share-menu" style="display:none;">
+                <a class="fa-share-alt" href="#share-menu">Share</a>
+            </li>
+            
+            <li class="search">
+                <a class="fa-search" href="#search">Search</a>
+                <form id="search" method="get" action="//google.com/search">
+                    <input type="text" name="q" placeholder="Search" />
+                    <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+                </form>
+            </li>
+            <li class="menu">
+                <a class="fa-bars" href="#menu">Menu</a>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+
+<section id="menu">
+
+    
+        <section>
+            <form class="search" method="get" action="//google.com/search">
+                <input type="text" name="q" placeholder="Search" />
+                <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+            </form>
+        </section>
+
+    
+        <section>
+            <ul class="links">
+                
+                    <li>
+                        <a href="https://andyyin.github.io/">
+                            <h3>
+                                <i class="fa fa-home">&nbsp;</i>主页
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/blog/">
+                            <h3>
+                                <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/categories/">
+                            <h3>
+                                <i class="fa fa-sitemap">&nbsp;</i>分类
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/about/">
+                            <h3>
+                                <i class="fa fa-id-card-o">&nbsp;</i>关于
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/links/">
+                            <h3>
+                                <i class="fa fa-link">&nbsp;</i>友链
+                            </h3>
+                        </a>
+                    </li>
+                
+            </ul>
+        </section>
+
+    
+        <section class="recent-posts">
+            <div class="mini-posts">
+                <header>
+                    <h3>Recent Posts</h3>
+                </header>
+                
+
+                
+                    
+                
+
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-06-07'>
+                                    June 7, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-19'>
+                                    May 19, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-09'>
+                                    May 9, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-21'>
+                                    April 21, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-15'>
+                                    April 15, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+
+                
+                    <a href=
+                        
+                            /blog/
+                        
+                        class="button">更多</a>
+                
+            </div>
+        </section>
+
+    
+        
+</section>
+
+    <section id="share-menu">
+    <section id="social-share-nav">
+        <ul class="links">
+            <header>
+                <h3>Share this post <i class="fa fa-smile-o"></i></h3>
+            </header>
+            
+
+
+
+<li>
+  <a href="//twitter.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2fsystem.gc-%25E6%25BA%2590%25E7%25A0%2581%25E8%25A7%25A3%25E8%25AF%25BB%2f&amp;text=System.gc%28%29%20%e6%ba%90%e7%a0%81%e8%a7%a3%e8%af%bb&amp;via=" target="_blank" class="share-btn twitter">
+    <i class="fa fa-twitter"></i>
+    <p>Twitter</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//plus.google.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2fsystem.gc-%25E6%25BA%2590%25E7%25A0%2581%25E8%25A7%25A3%25E8%25AF%25BB%2f" target="_blank" class="share-btn google-plus">
+    <i class="fa fa-google-plus"></i>
+    <p>Google+</p>
+  </a>
+</li>
+
+
+
+
+
+<li>
+  <a href="//www.facebook.com/sharer/sharer.php?u=https%3a%2f%2fandyyin.github.io%2fblog%2fsystem.gc-%25E6%25BA%2590%25E7%25A0%2581%25E8%25A7%25A3%25E8%25AF%25BB%2f" target="_blank" class="share-btn facebook">
+    <i class="fa fa-facebook"></i>
+    <p>Facebook</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//reddit.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2fsystem.gc-%25E6%25BA%2590%25E7%25A0%2581%25E8%25A7%25A3%25E8%25AF%25BB%2f&amp;title=System.gc%28%29%20%e6%ba%90%e7%a0%81%e8%a7%a3%e8%af%bb" target="_blank" class="share-btn reddit">
+    <i class="fa fa-reddit-alien"></i>
+    <p>Reddit</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.linkedin.com/shareArticle?url=https%3a%2f%2fandyyin.github.io%2fblog%2fsystem.gc-%25E6%25BA%2590%25E7%25A0%2581%25E8%25A7%25A3%25E8%25AF%25BB%2f&amp;title=System.gc%28%29%20%e6%ba%90%e7%a0%81%e8%a7%a3%e8%af%bb" target="_blank" class="share-btn linkedin">
+      <i class="fa fa-linkedin"></i>
+      <p>LinkedIn</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.stumbleupon.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2fsystem.gc-%25E6%25BA%2590%25E7%25A0%2581%25E8%25A7%25A3%25E8%25AF%25BB%2f&amp;title=System.gc%28%29%20%e6%ba%90%e7%a0%81%e8%a7%a3%e8%af%bb" target="_blank" class="share-btn stumbleupon">
+    <i class="fa fa-stumbleupon"></i>
+    <p>StumbleUpon</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.pinterest.com/pin/create/button/?url=https%3a%2f%2fandyyin.github.io%2fblog%2fsystem.gc-%25E6%25BA%2590%25E7%25A0%2581%25E8%25A7%25A3%25E8%25AF%25BB%2f&amp;description=System.gc%28%29%20%e6%ba%90%e7%a0%81%e8%a7%a3%e8%af%bb" target="_blank" class="share-btn pinterest">
+    <i class="fa fa-pinterest-p"></i>
+    <p>Pinterest</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="mailto:?subject=Check out this post by %e6%b6%a4%e7%94%9f&amp;body=https%3a%2f%2fandyyin.github.io%2fblog%2fsystem.gc-%25E6%25BA%2590%25E7%25A0%2581%25E8%25A7%25A3%25E8%25AF%25BB%2f" target="_blank" class="share-btn email">
+    <i class="fa fa-envelope"></i>
+    <p>Email</p>
+  </a>
+</li>
+
+
+        </ul>
+    </section>
+</section>
+
+    
+    <div id="main">
+        
+        
+        <article class="post">
+  <header>
+    <div class="title">
+        
+            <h1><a href="https://andyyin.github.io/blog/system.gc-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/">System.gc() 源码解读</a></h1>
+            
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2018-01-14'>
+            2018-01-14</time>
+        <span class="author">涤生</span>
+        
+            <p>4 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+
+  
+
+  
+
+  <div id="content">
+    
+
+<h1 id="介绍">介绍</h1>
+
+<p>System.gc()，大家应该也有所了解，是 JDK 提供的触发 Full GC 的一种方式，会触发 Full GC，其间会 stop the world，对业务影响较大，一般情况下不会直接使用。</p>
+
+<blockquote>
+<p>那它是如何实现的呢？
+另外有哪些参数可以进行优化呢？
+我们带着问题来对相关源码解读一下。</p>
+</blockquote>
+
+<h1 id="实现">实现</h1>
+
+<h2 id="jdk实现">JDK实现</h2>
+
+<pre><code>/**
+     * Runs the garbage collector.
+     * &lt;p&gt;
+     * Calling the &lt;code&gt;gc&lt;/code&gt; method suggests that the Java Virtual
+     * Machine expend effort toward recycling unused objects in order to
+     * make the memory they currently occupy available for quick reuse.
+     * When control returns from the method call, the Java Virtual
+     * Machine has made a best effort to reclaim space from all discarded
+     * objects.
+     * &lt;p&gt;
+     * The call &lt;code&gt;System.gc()&lt;/code&gt; is effectively equivalent to the
+     * call:
+     * &lt;blockquote&gt;&lt;pre&gt;
+     * Runtime.getRuntime().gc()
+     * &lt;/pre&gt;&lt;/blockquote&gt;
+     *
+     * @see     java.lang.Runtime#gc()
+     */
+    public static void gc() {
+        Runtime.getRuntime().gc();
+    }
+</code></pre>
+
+<p>其实就是调用了 Runtime 类的 gc 方法。</p>
+
+<pre><code>/**
+     * Runs the garbage collector.
+     * Calling this method suggests that the Java virtual machine expend
+     * effort toward recycling unused objects in order to make the memory
+     * they currently occupy available for quick reuse. When control
+     * returns from the method call, the virtual machine has made
+     * its best effort to recycle all discarded objects.
+     * &lt;p&gt;
+     * The name &lt;code&gt;gc&lt;/code&gt; stands for &quot;garbage
+     * collector&quot;. The virtual machine performs this recycling
+     * process automatically as needed, in a separate thread, even if the
+     * &lt;code&gt;gc&lt;/code&gt; method is not invoked explicitly.
+     * &lt;p&gt;
+     * The method {@link System#gc()} is the conventional and convenient
+     * means of invoking this method.
+     */
+    public native void gc();
+</code></pre>
+
+<p>Runtime 类的 gc 方法是个 native 方法，所以只能进入 JVM 代码去看其真正的实现了。</p>
+
+<h2 id="jvm实现">JVM实现</h2>
+
+<p>打开 openjdk 的源码，Runtime 类的 gc 方法在 Runtime.c 文件中有具体的实现</p>
+
+<pre><code>JNIEXPORT void JNICALL
+Java_java_lang_Runtime_gc(JNIEnv *env, jobject this)
+{
+    JVM_GC();
+}
+</code></pre>
+
+<p>可以看到直接调用了 JVM_GC() 方法，这个方法的实现在 jvm.cpp 中</p>
+
+<pre><code>JVM_ENTRY_NO_ENV(void, JVM_GC(void))
+  JVMWrapper(&quot;JVM_GC&quot;);
+  if (!DisableExplicitGC) {
+    Universe::heap()-&gt;collect(GCCause::_java_lang_system_gc);
+  }
+JVM_END
+</code></pre>
+
+<p>很明显最终调用的是 heap 的 collect 方法，gcCause 为 _java_lang_system_gc。这里有个注意点就是 DisableExplicitGC，如果是 true 就不会执行 collect 方法，也就是使得 System.gc() 无效，DisableExplicitGC 这个参数对应到的配置就是 -XX:+DisableExplicitGC，默认是 false，如果配置了，就是 true。</p>
+
+<p>heap 有几种，具体是哪种 heap，需要看 gc 算法，如常用的 CMS GC 的对应的 heap 是 GenCollectedHeap，所以我们再看看 GenCollectedHeap.cpp 对应的 collect 方法</p>
+
+<pre><code>void GenCollectedHeap::collect(GCCause::Cause cause) {
+  if (should_do_concurrent_full_gc(cause)) {
+#ifndef SERIALGC
+    // mostly concurrent full collection
+    collect_mostly_concurrent(cause);
+#else  // SERIALGC
+    ShouldNotReachHere();
+#endif // SERIALGC
+  } else {
+#ifdef ASSERT
+    if (cause == GCCause::_scavenge_alot) {
+      // minor collection only
+      collect(cause, 0);
+    } else {
+      // Stop-the-world full collection
+      collect(cause, n_gens() - 1);
+    }
+#else
+    // Stop-the-world full collection
+    collect(cause, n_gens() - 1);
+#endif
+  }
+}
+</code></pre>
+
+<p>这个方法首先通过 should_do_concurrent_full_gc 方法判断是不是进行一次并发 Full GC，如果是则调用 collect_mostly_concurrent 方法，进行并发 Full GC；如果不是则一般会走到 collect(cause, n_gens() - 1) 这段逻辑，进行 Stop the world Full GC，我们就称之为一般 Full GC。</p>
+
+<p>我们先看看 should_do_concurrent_full_gc 到底有哪些条件</p>
+
+<pre><code>bool GenCollectedHeap::should_do_concurrent_full_gc(GCCause::Cause cause) {
+  return UseConcMarkSweepGC &amp;&amp;
+         ((cause == GCCause::_gc_locker &amp;&amp; GCLockerInvokesConcurrent) ||
+          (cause == GCCause::_java_lang_system_gc &amp;&amp; ExplicitGCInvokesConcurrent));
+}
+</code></pre>
+
+<p>很明显如果是 CMS GC，则判断 GCCause，如果是 _java_lang_system_gc 并且  ExplicitGCInvokesConcurrent 为 true 则返回 true，这里又引出了另一个参数 ExplicitGCInvokesConcurrent，如果配置了 -XX:+ExplicitGCInvokesConcurrent，则返回 true，进行并行 Full GC，默认为 false。</p>
+
+<h3 id="并发-full-gc">并发 Full GC</h3>
+
+<p>我们接着先来看 collect_mostly_concurrent，是如何进行并行 Full GC。</p>
+
+<pre><code>void GenCollectedHeap::collect_mostly_concurrent(GCCause::Cause cause) {
+  assert(!Heap_lock-&gt;owned_by_self(), &quot;Should not own Heap_lock&quot;);
+
+  MutexLocker ml(Heap_lock);
+  // Read the GC counts while holding the Heap_lock
+  unsigned int full_gc_count_before = total_full_collections();
+  unsigned int gc_count_before      = total_collections();
+  {
+    MutexUnlocker mu(Heap_lock);
+    VM_GenCollectFullConcurrent op(gc_count_before, full_gc_count_before, cause);
+    VMThread::execute(&amp;op);
+  }
+}
+
+</code></pre>
+
+<p>最终通过 VMThread 来进行 VM_GenCollectFullConcurrent 中的 void VM_GenCollectFullConcurrent::doit() 方法来进行回收，这里代码有点多就不展开了，这里最终执行了一次 Young GC 来回收 Young Gen，另外执行了下面这个方法</p>
+
+<pre><code>void CMSCollector::request_full_gc(unsigned int full_gc_count, GCCause::Cause cause) {
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+  unsigned int gc_count = gch-&gt;total_full_collections();
+  if (gc_count == full_gc_count) {
+    MutexLockerEx y(CGC_lock, Mutex::_no_safepoint_check_flag);
+    _full_gc_requested = true;
+    _full_gc_cause = cause;
+    CGC_lock-&gt;notify();   // nudge CMS thread
+  } else {
+    assert(gc_count &gt; full_gc_count, &quot;Error: causal loop&quot;);
+  }
+}
+</code></pre>
+
+<p>这里主要看 _full_gc_requested 设置成 true 以及唤醒 CMS background 回收线程。
+大家可能了解过 CMS GC 有个后台线程一直在扫描，是否进行一次 CMS GC，这个线程默认 2s 进行一次扫描，其中有个判断条件 _full_gc_requested 是否为 true，如果为 true，进行一次 CMS GC，对 Old Gen 和 Perm Gen 进行一次回收。</p>
+
+<h3 id="一般-full-gc">一般 Full GC</h3>
+
+<p>一般的 Full GC 会走下面逻辑</p>
+
+<pre><code>void GenCollectedHeap::collect_locked(GCCause::Cause cause, int max_level) {
+  if (_preloading_shared_classes) {
+    report_out_of_shared_space(SharedPermGen);
+  }
+  // Read the GC count while holding the Heap_lock
+  unsigned int gc_count_before      = total_collections();
+  unsigned int full_gc_count_before = total_full_collections();
+  {
+    MutexUnlocker mu(Heap_lock);  // give up heap lock, execute gets it back
+    VM_GenCollectFull op(gc_count_before, full_gc_count_before,
+                         cause, max_level);
+    VMThread::execute(&amp;op);
+  }
+}
+</code></pre>
+
+<p>通过 VMThread 来调用 VM_GenCollectFull 中的 void VM_GenCollectFull::doit() 方法来进行回收。</p>
+
+<pre><code>void VM_GenCollectFull::doit() {
+  SvcGCMarker sgcm(SvcGCMarker::FULL);
+
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+  GCCauseSetter gccs(gch, _gc_cause);
+  gch-&gt;do_full_collection(gch-&gt;must_clear_all_soft_refs(), _max_level);
+}
+</code></pre>
+
+<p>这里最终会通过 GenCollectedHeap 的 do_full_collection 方法进行一次 Full GC，会回收 Young、Old、Perm 区，并且即使 Old Gen 使用的是 CMS GC，也会对 Old Gen 进行 compact，也就是 MSC，标记-清除-压缩。</p>
+
+<h1 id="总结">总结</h1>
+
+<p>System.gc() 会触发 Full GC，可以通过 -XX:+DisableExplicitGC 参数屏蔽 System.gc()，在使用 CMS GC 的前提下，也可以使用 -XX:+ExplicitGCInvokesConcurrent 参数来进行并行 Full GC，提升性能。
+不过，一般不推荐使用 System.gc()，因为 Full GC 耗时比较长，对应用影响较大，如前段时间的一个案例：<a href="https://andyyin.github.io/blog/依赖包滥用-system.gc-导致的-full-gc/">依赖包滥用 System.gc() 导致的频繁 Full GC</a>。
+并且也不建议设置 -XX:+DisableExplicitGC，特别是在有使用堆外内存的情况下，如果堆外内存申请不到足够的空间，jdk 会触发一次 System.gc()，来进行回收，如果屏蔽了，最后一根救命稻草也就失效了，自然就 OOM了。</p>
+
+<hr />
+
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
+<p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
+
+<p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
+
+  </div>
+
+  <footer>
+    <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/jvm">JVM</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/system.gc">System.gc()</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+
+</article>
+
+<ul class="actions pagination">
+    
+        <li><a href="https://andyyin.github.io/blog/%E4%BE%9D%E8%B5%96%E5%8C%85%E6%BB%A5%E7%94%A8-system.gc-%E5%AF%BC%E8%87%B4%E7%9A%84-full-gc/"
+                class="button big previous">依赖包滥用 System.gc() 导致的 Full GC</a></li>
+    
+
+    
+        <li><a href="https://andyyin.github.io/blog/phantomreference-%E5%AF%BC%E8%87%B4-cms-gc-%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/"
+                class="button big next">PhantomReference 导致 CMS GC 耗时严重</a></li>
+    
+</ul>
+
+
+    </div>
+    
+<section id="sidebar">
+
+  
+  <section id="intro">
+    
+    
+      
+        <a href='https://andyyin.github.io/'><img src="https://andyyin.github.io/img/main/disheng.jpg" class="intro-circle" width="100" alt="涤生的博客" /></a>
+      
+    
+    
+      <header>
+        <h2>涤生的博客</h2>
+        <p>主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      </header>
+    
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+  </section>
+
+  
+  <section class="recent-posts">
+    <div class="mini-posts">
+      <header>
+        <h3>最新文章</h3>
+      </header>
+      <div class="posts-container">
+        
+
+        
+          
+        
+
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a>
+              </h3>
+              
+              <time class="published" datetime='2019-06-07'>
+                2019-06-07
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-19'>
+                2019-05-19
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-09'>
+                2019-05-09
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-21'>
+                2019-04-21
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-15'>
+                2019-04-15
+              </time>
+            </header>
+            
+
+          </article>
+        
+      </div>
+
+      
+        <a href=
+          
+            /blog/
+          
+        class="button">更多</a>
+      
+    </div>
+  </section>
+
+  
+  
+  
+  
+  
+    <section id="categories">
+      <header>
+        <h3>
+          <a href="https://andyyin.github.io/categories/">分类</a>
+        </h3>
+      </header>
+        
+          
+        
+
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">9</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">9</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/jvm/">JVM</a>
+                <span style="float:right;">7</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/zookeeper/">Zookeeper</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+    </section>
+  
+  
+
+  
+  
+    <section id="mini-bio">
+      <h3>关于我</h3>
+      <p>涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。 </p>
+      <a href="https://andyyin.github.io/about/" class="button">了解更多</a>
+    </section>
+  
+
+  
+  <section id="footer">
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+    <p class="copyright">
+      
+        &copy; 2019
+        
+          涤生的博客
+        
+      .
+      Powered by <a href="https://andyyin.github.io/" target="_blank">涤生</a>
+    </p>
+  </section>
+</section>
+
+    </div>
+    <a id="back-to-top" href="#" class="fa fa-arrow-up fa-border fa-2x"></a>
+    
+
+    
+      
+    
+
+    
+      
+      
+      
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/highlight.min.js"></script>
+        
+        
+        
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/r.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/yaml.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/css.min.js"></script>
+        <script>hljs.configure({languages: []}); hljs.initHighlightingOnLoad();</script>
+      
+    
+    
+    
+      <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/skel/3.0.1/skel.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.js"></script>
+      <script src="https://andyyin.github.io/js/util.js"></script>
+      <script src="https://andyyin.github.io/js/main.js"></script>
+      <script src="https://andyyin.github.io/js/backToTop.js"></script>
+    
+
+    
+      
+        
+      
+    
+
+    
+    <script>hljs.initHighlightingOnLoad();</script>
+      <script src="//yihui.name/js/math-code.js"></script>
+<script async
+src="//cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+  </body>
+</html>
+

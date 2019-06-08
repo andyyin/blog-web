@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>System.gc() on 涤生的博客</title>
+    <link>https://andyyin.github.io/tags/system.gc/</link>
+    <description>Recent content in System.gc() on 涤生的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh</language>
+    <lastBuildDate>Sun, 14 Jan 2018 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://andyyin.github.io/tags/system.gc/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>System.gc() 源码解读</title>
+      <link>https://andyyin.github.io/blog/system.gc-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/</link>
+      <pubDate>Sun, 14 Jan 2018 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/system.gc-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/</guid>
+      <description>介绍 System.gc()，大家应该也有所了解，是 JDK 提供的触发 Full GC 的一种方式，会触发 Full GC，其间会 stop the world，对业务影响较大，一般情况下不会直接使用。
+ 那它是如何实现的呢？ 另外有哪些参数可以进行优化呢？ 我们带着问题来对相关源码解读一下。
+ 实现 JDK实现 /** * Runs the garbage collector. * &amp;lt;p&amp;gt; * Calling the &amp;lt;code&amp;gt;gc&amp;lt;/code&amp;gt; method suggests that the Java Virtual * Machine expend effort toward recycling unused objects in order to * make the memory they currently occupy available for quick reuse. * When control returns from the method call, the Java Virtual * Machine has made a best effort to reclaim space from all discarded * objects.</description>
+    </item>
+    
+    <item>
+      <title>依赖包滥用 System.gc() 导致的 Full GC</title>
+      <link>https://andyyin.github.io/blog/%E4%BE%9D%E8%B5%96%E5%8C%85%E6%BB%A5%E7%94%A8-system.gc-%E5%AF%BC%E8%87%B4%E7%9A%84-full-gc/</link>
+      <pubDate>Wed, 11 Oct 2017 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E4%BE%9D%E8%B5%96%E5%8C%85%E6%BB%A5%E7%94%A8-system.gc-%E5%AF%BC%E8%87%B4%E7%9A%84-full-gc/</guid>
+      <description>介绍 业务部门的一个同事遇到个奇怪的 Full GC 问题，有个服务迁移到新的应用后，一直频繁 Full GC。新应用机器的配置是 4c 8g，老应用是 4c 4g，老应用 GC 都很正常，并且代码没有变更，所以比较奇怪。
+现象 问题的现象是，从监控图上看一直有大量的 Full GC 排查 遇到这个问题，一般都是先看看各个区的内存占用情况： 从监控图上看 Old Gen、Young Gen、Perm Gen，没什么问题，不会触发 Full GC，当然这里看各个 Gen 是否会触发 Full GC 需要结合 JVM 参数配置来看。
+顺便也看了下 GC 日志，一直狂暴 CMS GC 日志，而且可以看到老年代使用空间也不大，细心可以发现，大量的 CMS GC 中夹杂着 Young、Perm Gen 的回收，所以其实是 Full GC。GC 日志如下： 老应用的 JVM 参数配置 新应用的 JVM 参数配置 通过上面的观察，再根据一般触发 CMS GC 几个可能性：
+ Old Gen 使用达到一定的比率，默认为 92%，这里看 CMSInitiatingOccupancyFraction=80%，而实际才使用 2%（看监控图表）不到，所以排除这种情况。 配置了 CMSClassUnloadingEnabled，且 Perm Gen 的使用达到一定的比率默认为 92%，这里看 CMSInitiatingPermOccupancyFraction=80%，而实际才使用 30％（看监控图表）不到，所以排除这种情况。 配置了 ExplictGCInvokesConcurrent 且未配置 DisableExplicitGC 的情况下显示调用了 System.</description>
+    </item>
+    
+  </channel>
+</rss>

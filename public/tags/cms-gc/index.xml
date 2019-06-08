@@ -6,10 +6,28 @@
     <description>Recent content in CMS GC on 涤生的博客</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>zh</language>
-    <lastBuildDate>Wed, 10 Apr 2019 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Fri, 07 Jun 2019 00:00:00 +0000</lastBuildDate>
     
 	<atom:link href="https://andyyin.github.io/tags/cms-gc/index.xml" rel="self" type="application/rss+xml" />
     
+    
+    <item>
+      <title>JVM 源码解读之 CMS GC 触发条件</title>
+      <link>https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/</link>
+      <pubDate>Fri, 07 Jun 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/</guid>
+      <description>前言 经常有同学会问，为啥我的应用 Old Gen 的使用占比没达到 CMSInitiatingOccupancyFraction 参数配置的阈值，就触发了 CMS GC，表示很莫名奇妙，不知道问题出在哪？
+其实 CMS GC 的触发条件非常多，不只是 CMSInitiatingOccupancyFraction 阈值触发这么简单。本文通过源码全面梳理了触发 CMS GC 的条件，尽可能的帮你了解平时遇到的奇奇怪怪的 CMS GC 问题。
+先抛出一些问题，来吸引你的注意力。
+ 为什么 Old Gen 使用占比仅 50% 就进行了一次 CMS GC？
+Metaspace 的使用也会触发 CMS GC 吗？
+为什么 Old Gen 使用占比非常小就进行了一次 CMS GC？
+ 触发条件 CMS GC 在实现上分成 foreground collector 和 background collector。foreground collector 相对比较简单，background collector 比较复杂，情况比较多。
+下面我们从 foreground collector 和 background collector 分别来说明他们的触发条件：
+ 说明：本文内容是基于 JDK 8
+说明：本文仅涉及 CMS GC 的触发条件，至于算法的具体过程，以及什么时候进行 MSC（mark sweep compact）不在本文范围</description>
+    </item>
     
     <item>
       <title>再次剖析 “一个 JVM 参数引发的频繁 CMS GC”</title>

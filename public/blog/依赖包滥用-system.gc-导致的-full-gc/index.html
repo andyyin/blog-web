@@ -1,0 +1,1058 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <script type="application/ld+json">
+    {
+        "@context" : "http://schema.org",
+        "@type" : "BlogPosting",
+        "mainEntityOfPage": {
+             "@type": "WebPage",
+             "@id": "https://andyyin.github.io"
+        },
+        "articleSection" : "blog",
+        "name" : "依赖包滥用 System.gc() 导致的 Full GC",
+        "headline" : "依赖包滥用 System.gc() 导致的 Full GC",
+        "description" : "介绍 业务部门的一个同事遇到个奇怪的 Full GC 问题，有个服务迁移到新的应用后，一直频繁 Full GC。新应用机器的配置是 4c 8g，老应用是 4c 4g，老应用 GC 都很正常，并且代码没有变更，所以比较奇怪。
+现象 问题的现象是，从监控图上看一直有大量的 Full GC 排查 遇到这个问题，一般都是先看看各个区的内存占用情况： 从监控图上看 Old Gen、Young Gen、Perm Gen，没什么问题，不会触发 Full GC，当然这里看各个 Gen 是否会触发 Full GC 需要结合 JVM 参数配置来看。
+顺便也看了下 GC 日志，一直狂暴 CMS GC 日志，而且可以看到老年代使用空间也不大，细心可以发现，大量的 CMS GC 中夹杂着 Young、Perm Gen 的回收，所以其实是 Full GC。GC 日志如下： 老应用的 JVM 参数配置 新应用的 JVM 参数配置 通过上面的观察，再根据一般触发 CMS GC 几个可能性：
+ Old Gen 使用达到一定的比率，默认为 92%，这里看 CMSInitiatingOccupancyFraction=80%，而实际才使用 2%（看监控图表）不到，所以排除这种情况。 配置了 CMSClassUnloadingEnabled，且 Perm Gen 的使用达到一定的比率默认为 92%，这里看 CMSInitiatingPermOccupancyFraction=80%，而实际才使用 30％（看监控图表）不到，所以排除这种情况。 配置了 ExplictGCInvokesConcurrent 且未配置 DisableExplicitGC 的情况下显示调用了 System.",
+        "inLanguage" : "zh",
+        "author" : "",
+        "creator" : "",
+        "publisher": "",
+        "accountablePerson" : "",
+        "copyrightHolder" : "",
+        "copyrightYear" : "2017",
+        "datePublished": "2017-10-11 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2017-10-11 00:00:00 &#43;0000 UTC",
+        "url" : "https://andyyin.github.io/blog/%E4%BE%9D%E8%B5%96%E5%8C%85%E6%BB%A5%E7%94%A8-system.gc-%E5%AF%BC%E8%87%B4%E7%9A%84-full-gc/",
+        "wordCount" : "165",
+        "keywords" : [ "Java","JVM","GC","System.gc()","Full GC","Blog" ]
+    }
+    </script>
+        
+            
+                <title>依赖包滥用 System.gc() 导致的 Full GC</title>
+            
+        
+
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content="Hugo 0.54.0" />
+        
+
+
+        
+            <meta name="author" content="涤生">
+        
+        
+            
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注">
+            
+        
+
+        <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="依赖包滥用 System.gc() 导致的 Full GC"/>
+<meta name="twitter:description" content="介绍 业务部门的一个同事遇到个奇怪的 Full GC 问题，有个服务迁移到新的应用后，一直频繁 Full GC。新应用机器的配置是 4c 8g，老应用是 4c 4g，老应用 GC 都很正常，并且代码没有变更，所以比较奇怪。
+现象 问题的现象是，从监控图上看一直有大量的 Full GC 排查 遇到这个问题，一般都是先看看各个区的内存占用情况： 从监控图上看 Old Gen、Young Gen、Perm Gen，没什么问题，不会触发 Full GC，当然这里看各个 Gen 是否会触发 Full GC 需要结合 JVM 参数配置来看。
+顺便也看了下 GC 日志，一直狂暴 CMS GC 日志，而且可以看到老年代使用空间也不大，细心可以发现，大量的 CMS GC 中夹杂着 Young、Perm Gen 的回收，所以其实是 Full GC。GC 日志如下： 老应用的 JVM 参数配置 新应用的 JVM 参数配置 通过上面的观察，再根据一般触发 CMS GC 几个可能性：
+ Old Gen 使用达到一定的比率，默认为 92%，这里看 CMSInitiatingOccupancyFraction=80%，而实际才使用 2%（看监控图表）不到，所以排除这种情况。 配置了 CMSClassUnloadingEnabled，且 Perm Gen 的使用达到一定的比率默认为 92%，这里看 CMSInitiatingPermOccupancyFraction=80%，而实际才使用 30％（看监控图表）不到，所以排除这种情况。 配置了 ExplictGCInvokesConcurrent 且未配置 DisableExplicitGC 的情况下显示调用了 System."/>
+
+        <meta property="og:title" content="依赖包滥用 System.gc() 导致的 Full GC" />
+<meta property="og:description" content="介绍 业务部门的一个同事遇到个奇怪的 Full GC 问题，有个服务迁移到新的应用后，一直频繁 Full GC。新应用机器的配置是 4c 8g，老应用是 4c 4g，老应用 GC 都很正常，并且代码没有变更，所以比较奇怪。
+现象 问题的现象是，从监控图上看一直有大量的 Full GC 排查 遇到这个问题，一般都是先看看各个区的内存占用情况： 从监控图上看 Old Gen、Young Gen、Perm Gen，没什么问题，不会触发 Full GC，当然这里看各个 Gen 是否会触发 Full GC 需要结合 JVM 参数配置来看。
+顺便也看了下 GC 日志，一直狂暴 CMS GC 日志，而且可以看到老年代使用空间也不大，细心可以发现，大量的 CMS GC 中夹杂着 Young、Perm Gen 的回收，所以其实是 Full GC。GC 日志如下： 老应用的 JVM 参数配置 新应用的 JVM 参数配置 通过上面的观察，再根据一般触发 CMS GC 几个可能性：
+ Old Gen 使用达到一定的比率，默认为 92%，这里看 CMSInitiatingOccupancyFraction=80%，而实际才使用 2%（看监控图表）不到，所以排除这种情况。 配置了 CMSClassUnloadingEnabled，且 Perm Gen 的使用达到一定的比率默认为 92%，这里看 CMSInitiatingPermOccupancyFraction=80%，而实际才使用 30％（看监控图表）不到，所以排除这种情况。 配置了 ExplictGCInvokesConcurrent 且未配置 DisableExplicitGC 的情况下显示调用了 System." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://andyyin.github.io/blog/%E4%BE%9D%E8%B5%96%E5%8C%85%E6%BB%A5%E7%94%A8-system.gc-%E5%AF%BC%E8%87%B4%E7%9A%84-full-gc/" />
+<meta property="article:published_time" content="2017-10-11T00:00:00&#43;00:00"/>
+<meta property="article:modified_time" content="2017-10-11T00:00:00&#43;00:00"/>
+
+        <meta property="og:image" content="https://andyyin.github.io/images/logo.png">
+        <meta property="og:image:type" content="image/png">
+        <meta property="og:image:width" content="512">
+        <meta property="og:image:height" content="512">
+        
+<meta itemprop="name" content="依赖包滥用 System.gc() 导致的 Full GC">
+<meta itemprop="description" content="介绍 业务部门的一个同事遇到个奇怪的 Full GC 问题，有个服务迁移到新的应用后，一直频繁 Full GC。新应用机器的配置是 4c 8g，老应用是 4c 4g，老应用 GC 都很正常，并且代码没有变更，所以比较奇怪。
+现象 问题的现象是，从监控图上看一直有大量的 Full GC 排查 遇到这个问题，一般都是先看看各个区的内存占用情况： 从监控图上看 Old Gen、Young Gen、Perm Gen，没什么问题，不会触发 Full GC，当然这里看各个 Gen 是否会触发 Full GC 需要结合 JVM 参数配置来看。
+顺便也看了下 GC 日志，一直狂暴 CMS GC 日志，而且可以看到老年代使用空间也不大，细心可以发现，大量的 CMS GC 中夹杂着 Young、Perm Gen 的回收，所以其实是 Full GC。GC 日志如下： 老应用的 JVM 参数配置 新应用的 JVM 参数配置 通过上面的观察，再根据一般触发 CMS GC 几个可能性：
+ Old Gen 使用达到一定的比率，默认为 92%，这里看 CMSInitiatingOccupancyFraction=80%，而实际才使用 2%（看监控图表）不到，所以排除这种情况。 配置了 CMSClassUnloadingEnabled，且 Perm Gen 的使用达到一定的比率默认为 92%，这里看 CMSInitiatingPermOccupancyFraction=80%，而实际才使用 30％（看监控图表）不到，所以排除这种情况。 配置了 ExplictGCInvokesConcurrent 且未配置 DisableExplicitGC 的情况下显示调用了 System.">
+
+
+<meta itemprop="datePublished" content="2017-10-11T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2017-10-11T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="165">
+
+
+
+<meta itemprop="keywords" content="Java,JVM,GC,System.gc(),Full GC," />
+
+        
+
+        
+            
+        
+
+        
+        
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:400,800,900|Source+Sans+Pro:400,700">
+            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/main.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/add-on.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/academicons.min.css">
+        
+
+        
+            
+                
+            
+        
+
+
+  
+    
+    <link href='//cdn.bootcss.com/highlight.js/9.11.0/styles/github.min.css' rel='stylesheet' type='text/css' />
+  
+
+
+      
+    </head>
+    <body>
+
+      
+      <div id="wrapper">
+
+    
+    
+<header id="header">
+    
+      <h1><a href="https://andyyin.github.io/">涤生|个人博客</a></h1>
+    
+
+    <nav class="links">
+        <ul>
+            
+                <li>
+                    <a href="https://andyyin.github.io/">
+                            <i class="fa fa-home">&nbsp;</i>主页
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/blog/">
+                            <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/categories/">
+                            <i class="fa fa-sitemap">&nbsp;</i>分类
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/about/">
+                            <i class="fa fa-id-card-o">&nbsp;</i>关于
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/links/">
+                            <i class="fa fa-link">&nbsp;</i>友链
+                    </a>
+                </li>
+            
+        </ul>
+    </nav>
+    <nav class="main">
+        <ul>
+            
+            <li id="share-nav" class="share-menu" style="display:none;">
+                <a class="fa-share-alt" href="#share-menu">Share</a>
+            </li>
+            
+            <li class="search">
+                <a class="fa-search" href="#search">Search</a>
+                <form id="search" method="get" action="//google.com/search">
+                    <input type="text" name="q" placeholder="Search" />
+                    <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+                </form>
+            </li>
+            <li class="menu">
+                <a class="fa-bars" href="#menu">Menu</a>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+
+<section id="menu">
+
+    
+        <section>
+            <form class="search" method="get" action="//google.com/search">
+                <input type="text" name="q" placeholder="Search" />
+                <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+            </form>
+        </section>
+
+    
+        <section>
+            <ul class="links">
+                
+                    <li>
+                        <a href="https://andyyin.github.io/">
+                            <h3>
+                                <i class="fa fa-home">&nbsp;</i>主页
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/blog/">
+                            <h3>
+                                <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/categories/">
+                            <h3>
+                                <i class="fa fa-sitemap">&nbsp;</i>分类
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/about/">
+                            <h3>
+                                <i class="fa fa-id-card-o">&nbsp;</i>关于
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/links/">
+                            <h3>
+                                <i class="fa fa-link">&nbsp;</i>友链
+                            </h3>
+                        </a>
+                    </li>
+                
+            </ul>
+        </section>
+
+    
+        <section class="recent-posts">
+            <div class="mini-posts">
+                <header>
+                    <h3>Recent Posts</h3>
+                </header>
+                
+
+                
+                    
+                
+
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-06-07'>
+                                    June 7, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-19'>
+                                    May 19, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-09'>
+                                    May 9, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-21'>
+                                    April 21, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-04-15'>
+                                    April 15, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+
+                
+                    <a href=
+                        
+                            /blog/
+                        
+                        class="button">更多</a>
+                
+            </div>
+        </section>
+
+    
+        
+</section>
+
+    <section id="share-menu">
+    <section id="social-share-nav">
+        <ul class="links">
+            <header>
+                <h3>Share this post <i class="fa fa-smile-o"></i></h3>
+            </header>
+            
+
+
+
+<li>
+  <a href="//twitter.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25BE%259D%25E8%25B5%2596%25E5%258C%2585%25E6%25BB%25A5%25E7%2594%25A8-system.gc-%25E5%25AF%25BC%25E8%2587%25B4%25E7%259A%2584-full-gc%2f&amp;text=%e4%be%9d%e8%b5%96%e5%8c%85%e6%bb%a5%e7%94%a8%20System.gc%28%29%20%e5%af%bc%e8%87%b4%e7%9a%84%20Full%20GC&amp;via=" target="_blank" class="share-btn twitter">
+    <i class="fa fa-twitter"></i>
+    <p>Twitter</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//plus.google.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25BE%259D%25E8%25B5%2596%25E5%258C%2585%25E6%25BB%25A5%25E7%2594%25A8-system.gc-%25E5%25AF%25BC%25E8%2587%25B4%25E7%259A%2584-full-gc%2f" target="_blank" class="share-btn google-plus">
+    <i class="fa fa-google-plus"></i>
+    <p>Google+</p>
+  </a>
+</li>
+
+
+
+
+
+<li>
+  <a href="//www.facebook.com/sharer/sharer.php?u=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25BE%259D%25E8%25B5%2596%25E5%258C%2585%25E6%25BB%25A5%25E7%2594%25A8-system.gc-%25E5%25AF%25BC%25E8%2587%25B4%25E7%259A%2584-full-gc%2f" target="_blank" class="share-btn facebook">
+    <i class="fa fa-facebook"></i>
+    <p>Facebook</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//reddit.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25BE%259D%25E8%25B5%2596%25E5%258C%2585%25E6%25BB%25A5%25E7%2594%25A8-system.gc-%25E5%25AF%25BC%25E8%2587%25B4%25E7%259A%2584-full-gc%2f&amp;title=%e4%be%9d%e8%b5%96%e5%8c%85%e6%bb%a5%e7%94%a8%20System.gc%28%29%20%e5%af%bc%e8%87%b4%e7%9a%84%20Full%20GC" target="_blank" class="share-btn reddit">
+    <i class="fa fa-reddit-alien"></i>
+    <p>Reddit</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.linkedin.com/shareArticle?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25BE%259D%25E8%25B5%2596%25E5%258C%2585%25E6%25BB%25A5%25E7%2594%25A8-system.gc-%25E5%25AF%25BC%25E8%2587%25B4%25E7%259A%2584-full-gc%2f&amp;title=%e4%be%9d%e8%b5%96%e5%8c%85%e6%bb%a5%e7%94%a8%20System.gc%28%29%20%e5%af%bc%e8%87%b4%e7%9a%84%20Full%20GC" target="_blank" class="share-btn linkedin">
+      <i class="fa fa-linkedin"></i>
+      <p>LinkedIn</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.stumbleupon.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25BE%259D%25E8%25B5%2596%25E5%258C%2585%25E6%25BB%25A5%25E7%2594%25A8-system.gc-%25E5%25AF%25BC%25E8%2587%25B4%25E7%259A%2584-full-gc%2f&amp;title=%e4%be%9d%e8%b5%96%e5%8c%85%e6%bb%a5%e7%94%a8%20System.gc%28%29%20%e5%af%bc%e8%87%b4%e7%9a%84%20Full%20GC" target="_blank" class="share-btn stumbleupon">
+    <i class="fa fa-stumbleupon"></i>
+    <p>StumbleUpon</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.pinterest.com/pin/create/button/?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25BE%259D%25E8%25B5%2596%25E5%258C%2585%25E6%25BB%25A5%25E7%2594%25A8-system.gc-%25E5%25AF%25BC%25E8%2587%25B4%25E7%259A%2584-full-gc%2f&amp;description=%e4%be%9d%e8%b5%96%e5%8c%85%e6%bb%a5%e7%94%a8%20System.gc%28%29%20%e5%af%bc%e8%87%b4%e7%9a%84%20Full%20GC" target="_blank" class="share-btn pinterest">
+    <i class="fa fa-pinterest-p"></i>
+    <p>Pinterest</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="mailto:?subject=Check out this post by %e6%b6%a4%e7%94%9f&amp;body=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E4%25BE%259D%25E8%25B5%2596%25E5%258C%2585%25E6%25BB%25A5%25E7%2594%25A8-system.gc-%25E5%25AF%25BC%25E8%2587%25B4%25E7%259A%2584-full-gc%2f" target="_blank" class="share-btn email">
+    <i class="fa fa-envelope"></i>
+    <p>Email</p>
+  </a>
+</li>
+
+
+        </ul>
+    </section>
+</section>
+
+    
+    <div id="main">
+        
+        
+        <article class="post">
+  <header>
+    <div class="title">
+        
+            <h1><a href="https://andyyin.github.io/blog/%E4%BE%9D%E8%B5%96%E5%8C%85%E6%BB%A5%E7%94%A8-system.gc-%E5%AF%BC%E8%87%B4%E7%9A%84-full-gc/">依赖包滥用 System.gc() 导致的 Full GC</a></h1>
+            
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2017-10-11'>
+            2017-10-11</time>
+        <span class="author">涤生</span>
+        
+            <p>1 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+
+  
+
+  
+
+  <div id="content">
+    
+
+<h1 id="介绍">介绍</h1>
+
+<p>业务部门的一个同事遇到个奇怪的 Full GC 问题，有个服务迁移到新的应用后，一直频繁 Full GC。新应用机器的配置是 4c 8g，老应用是 4c 4g，老应用 GC 都很正常，并且代码没有变更，所以比较奇怪。</p>
+
+<h1 id="现象">现象</h1>
+
+<p>问题的现象是，从监控图上看一直有大量的 Full GC
+<img src="https://andyyin.github.io/img/2017/10/cmsgc/gcinfo.png" alt="GC 监控图" /></p>
+
+<h1 id="排查">排查</h1>
+
+<p>遇到这个问题，一般都是先看看各个区的内存占用情况：
+<img src="https://andyyin.github.io/img/2017/10/cmsgc/oldgenpercent.png" alt="Old/Young Gen 监控图" />
+<img src="https://andyyin.github.io/img/2017/10/cmsgc/permgenpercent.png" alt="Perm Gen 监控图" /></p>
+
+<p>从监控图上看 Old Gen、Young Gen、Perm Gen，没什么问题，不会触发 Full GC，当然这里看各个 Gen 是否会触发 Full GC 需要结合 JVM 参数配置来看。</p>
+
+<p>顺便也看了下 GC 日志，一直狂暴 CMS GC 日志，而且可以看到老年代使用空间也不大，细心可以发现，大量的 CMS GC 中夹杂着 Young、Perm Gen 的回收，所以其实是 Full GC。GC 日志如下：
+<img src="https://andyyin.github.io/img/2017/10/cmsgc/gclog.png" alt="GC 日志" /></p>
+
+<p>老应用的 JVM 参数配置
+<img src="https://andyyin.github.io/img/2017/10/cmsgc/oldapp-jvmparam.png" alt="老应用的 JVM 参数配置" /></p>
+
+<p>新应用的 JVM 参数配置
+<img src="https://andyyin.github.io/img/2017/10/cmsgc/newapp-jvmparam.png" alt="新应用的 JVM 参数配置" /></p>
+
+<p>通过上面的观察，再根据一般触发 CMS GC 几个可能性：</p>
+
+<ul>
+<li>Old Gen 使用达到一定的比率，默认为 92%，这里看 CMSInitiatingOccupancyFraction=80%，而实际才使用 2%（看监控图表）不到，所以排除这种情况。</li>
+<li>配置了 CMSClassUnloadingEnabled，且 Perm Gen 的使用达到一定的比率默认为 92%，这里看 CMSInitiatingPermOccupancyFraction=80%，而实际才使用 30％（看监控图表）不到，所以排除这种情况。</li>
+<li>配置了 ExplictGCInvokesConcurrent 且未配置 DisableExplicitGC 的情况下显示调用了 System.gc()。</li>
+<li>Hotspot 自己根据估计决定是否要触法，如 CMS 悲观策略，这类可以通过 GC 日志分析。</li>
+</ul>
+
+<p>大致判断很可能是 System.gc() 导致的问题，但是怎么定位调用 System.gc() 的代码呢？
+当时就想如果是 System.gc() 引起的频繁 Full GC，jstack 线程堆栈应该能看到一些信息，果不其然，确实通过线程堆栈找到了。
+<img src="https://andyyin.github.io/img/2017/10/cmsgc/jstackinfo.png" alt="jstack 线程堆栈" /></p>
+
+<p>jstack 作用非常大，很多问题都能从这里发现，而且比较轻量，对应用基本无影响。某次的 jstack 信息只代表那个时刻的线程堆栈，有时只看一个 jstack 信息可能看不出什么问题，一般可以多 jstack 几次，然后对比去看，基本就能发现一些问题。
+（当然该问题，也可能不是频繁的 Full GC，可能通过 jstack 定位不到问题，可以 jstat -gccause pid 1000，来查看 GC 原因。）</p>
+
+<p>很明显，是由于 jxl 这个包中的 close 方法显示调用了 System.gc() 导致的问题。</p>
+
+<p>跟了下代码，自然确实存在这段代码，不过有个设置开关，可以 disable 这个功能，所以在使用的时候可以设置 setGCDisabled(true)，关闭触发 System.gc()。
+<img src="https://andyyin.github.io/img/2017/10/cmsgc/jxl-systemgc.png" alt="触发 System.gc() 代码" /></p>
+
+<p>但是为什么老应用没有问题呢，主要是因为它 -XX:+DisableExplicitGC，屏蔽了 System.gc() 动作，新应用的JVM没有这个配置。</p>
+
+<p>可能大家还有个疑问，都知道 System.gc() 会触发 Full GC，那为什么一直进行 CMS GC（通过 GC 日志）呢？
+主要是因为这个参数 -XX:+ExplicitGCInvokesConcurrent，打开此参数后，会做并行 Full GC，只有配置 -XX:+UseConcMarkSweepGC 这个参数，该参数才会生效。因此，System.gc() 时 Old Gen 会进行 CMS GC，可提高 Full GC 效率。</p>
+
+<h1 id="总结">总结</h1>
+
+<p>尽量减少显示使用 System.gc() 来触发 Full GC，这会导致频繁 Full GC，非常影响应用性能。</p>
+
+<hr />
+
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
+<p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
+
+<p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
+
+  </div>
+
+  <footer>
+    <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/jvm">JVM</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/system.gc">System.gc()</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/full-gc">Full GC</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+
+</article>
+
+<ul class="actions pagination">
+    
+
+    
+        <li><a href="https://andyyin.github.io/blog/system.gc-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/"
+                class="button big next">System.gc() 源码解读</a></li>
+    
+</ul>
+
+
+    </div>
+    
+<section id="sidebar">
+
+  
+  <section id="intro">
+    
+    
+      
+        <a href='https://andyyin.github.io/'><img src="https://andyyin.github.io/img/main/disheng.jpg" class="intro-circle" width="100" alt="涤生的博客" /></a>
+      
+    
+    
+      <header>
+        <h2>涤生的博客</h2>
+        <p>主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      </header>
+    
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+  </section>
+
+  
+  <section class="recent-posts">
+    <div class="mini-posts">
+      <header>
+        <h3>最新文章</h3>
+      </header>
+      <div class="posts-container">
+        
+
+        
+          
+        
+
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a>
+              </h3>
+              
+              <time class="published" datetime='2019-06-07'>
+                2019-06-07
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-19'>
+                2019-05-19
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-09'>
+                2019-05-09
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-21'>
+                2019-04-21
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a>
+              </h3>
+              
+              <time class="published" datetime='2019-04-15'>
+                2019-04-15
+              </time>
+            </header>
+            
+
+          </article>
+        
+      </div>
+
+      
+        <a href=
+          
+            /blog/
+          
+        class="button">更多</a>
+      
+    </div>
+  </section>
+
+  
+  
+  
+  
+  
+    <section id="categories">
+      <header>
+        <h3>
+          <a href="https://andyyin.github.io/categories/">分类</a>
+        </h3>
+      </header>
+        
+          
+        
+
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">9</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">9</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/jvm/">JVM</a>
+                <span style="float:right;">7</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/zookeeper/">Zookeeper</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+    </section>
+  
+  
+
+  
+  
+    <section id="mini-bio">
+      <h3>关于我</h3>
+      <p>涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。 </p>
+      <a href="https://andyyin.github.io/about/" class="button">了解更多</a>
+    </section>
+  
+
+  
+  <section id="footer">
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+    <p class="copyright">
+      
+        &copy; 2019
+        
+          涤生的博客
+        
+      .
+      Powered by <a href="https://andyyin.github.io/" target="_blank">涤生</a>
+    </p>
+  </section>
+</section>
+
+    </div>
+    <a id="back-to-top" href="#" class="fa fa-arrow-up fa-border fa-2x"></a>
+    
+
+    
+      
+    
+
+    
+      
+      
+      
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/highlight.min.js"></script>
+        
+        
+        
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/r.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/yaml.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/css.min.js"></script>
+        <script>hljs.configure({languages: []}); hljs.initHighlightingOnLoad();</script>
+      
+    
+    
+    
+      <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/skel/3.0.1/skel.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.js"></script>
+      <script src="https://andyyin.github.io/js/util.js"></script>
+      <script src="https://andyyin.github.io/js/main.js"></script>
+      <script src="https://andyyin.github.io/js/backToTop.js"></script>
+    
+
+    
+      
+        
+      
+    
+
+    
+    <script>hljs.initHighlightingOnLoad();</script>
+      <script src="//yihui.name/js/math-code.js"></script>
+<script async
+src="//cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+  </body>
+</html>
+
