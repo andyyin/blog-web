@@ -31,8 +31,8 @@
         "accountablePerson" : "",
         "copyrightHolder" : "",
         "copyrightYear" : "2019",
-        "datePublished": "2019-06-07 00:00:00 &#43;0000 UTC",
-        "dateModified" : "2019-06-07 00:00:00 &#43;0000 UTC",
+        "datePublished": "2019-07-14 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2019-07-14 00:00:00 &#43;0000 UTC",
         "url" : "https://andyyin.github.io/blog/",
         "wordCount" : "0",
         "keywords" : [ "Blog" ]
@@ -64,7 +64,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://andyyin.github.io/blog/" />
 
-<meta property="og:updated_time" content="2019-06-07T00:00:00&#43;00:00"/>
+<meta property="og:updated_time" content="2019-07-14T00:00:00&#43;00:00"/>
 
         <meta property="og:image" content="https://andyyin.github.io/images/logo.png">
         <meta property="og:image:type" content="image/png">
@@ -243,6 +243,30 @@
                 
                         <article class="mini-post">
                             <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/">简单的 HTTP 调用，为什么时延这么大？</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-07-14'>
+                                    July 14, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-%E4%BD%95%E6%97%B6%E4%BC%9A%E8%BF%9B%E8%A1%8C-full-gc/">JVM 源码解读之 CMS 何时会进行 Full GC</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-06-15'>
+                                    June 15, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
                                 <h3><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a></h3>
                                 
                                 <time class="published" datetime=
@@ -277,30 +301,6 @@
 
                         </article>
                 
-                        <article class="mini-post">
-                            <header>
-                                <h3><a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a></h3>
-                                
-                                <time class="published" datetime=
-                                    '2019-04-21'>
-                                    April 21, 2019</time>
-                            </header>
-                            
-
-                        </article>
-                
-                        <article class="mini-post">
-                            <header>
-                                <h3><a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a></h3>
-                                
-                                <time class="published" datetime=
-                                    '2019-04-15'>
-                                    April 15, 2019</time>
-                            </header>
-                            
-
-                        </article>
-                
 
                 
                     <a href=
@@ -319,6 +319,173 @@
     
     <div id="main">
         
+        
+            <article class="post">
+  <header>
+    <div class="title">
+        
+            <h2><a href="https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/">简单的 HTTP 调用，为什么时延这么大？</a></h2>
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2019-07-14'>
+            2019-07-14</time>
+        <span class="author">涤生</span>
+        
+            <p>3 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+  
+
+  
+  <p>最近项目测试遇到个奇怪的现象，在测试环境通过 Apache HttpClient 调用后端的 HTTP 服务，平均耗时居然接近 <strong>39.2ms</strong>。可能你乍一看觉得这不是很正常吗，有什么好奇怪的？其实不然，我再来说下一些基本信息，该后端的 HTTP 服务并没有什么业务逻辑，只是将一段字符串转成大写然后返回，字符串长度也仅只有 <strong>100</strong> 字符，另外网络 ping 延时只有 <strong>1.9ms</strong> 左右。因此，理论上该调用耗时应该在 <strong>2-3ms</strong> 左右，但为什么平均耗时 <strong>39.2ms</strong> 呢？</p>
+  <footer>
+    <ul class="actions">
+      <li><a href="https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/" class="button big">阅读</a></li>
+    </ul>
+  <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/http">HTTP</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/http">HTTP</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E6%97%B6%E5%BB%B6">时延</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/httpserver">HTTPServer</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/nagle">Nagle</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/delayed-ack">Delayed ACK</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+</article>
+
+        
+            <article class="post">
+  <header>
+    <div class="title">
+        
+            <h2><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-%E4%BD%95%E6%97%B6%E4%BC%9A%E8%BF%9B%E8%A1%8C-full-gc/">JVM 源码解读之 CMS 何时会进行 Full GC</a></h2>
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2019-06-15'>
+            2019-06-15</time>
+        <span class="author">涤生</span>
+        
+            <p>3 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+  
+
+  
+  <p>在文章 <a href="https://andyyin.github.io/blog/jvm-源码解读之-cms-gc-触发条件">JVM 源码解读之 CMS GC 触发条件</a> 中分析了 CMS GC 触发的五类情况，并且提到 CMS GC 分为 foreground collector 和 background collector。
+不管是 foreground collector 还是 background collector 使用的都是 mark-sweep 算法，分阶段进行标记清理，优点很明显-低延时，但最大的缺点是存在碎片，内存空间利用率低。因此，CMS 为了解决这个问题，在每次进行 foreground collector 之前，判断是否需要进行一次压缩式 GC。</p>
+  <footer>
+    <ul class="actions">
+      <li><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-%E4%BD%95%E6%97%B6%E4%BC%9A%E8%BF%9B%E8%A1%8C-full-gc/" class="button big">阅读</a></li>
+    </ul>
+  <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/jvm">JVM</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/cms-gc">CMS GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/full-gc">Full GC</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/foreground-collector">foreground collector</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+</article>
+
         
             <article class="post">
   <header>
@@ -967,172 +1134,6 @@
 </article>
 
         
-            <article class="post">
-  <header>
-    <div class="title">
-        
-            <h2><a href="https://andyyin.github.io/blog/phantomreference-%E5%AF%BC%E8%87%B4-cms-gc-%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/">PhantomReference 导致 CMS GC 耗时严重</a></h2>
-        
-        
-    </div>
-    <div class="meta">
-        
-
-        <time class="published"
-            datetime='2018-02-02'>
-            2018-02-02</time>
-        <span class="author">涤生</span>
-        
-            <p>6 分钟阅读</p>
-        
-        
-    </div>
-</header>
-
-  
-
-  
-  <p>GC 优化关键是找到优化的点，如果明确 GC 过程中耗时的阶段在哪里，优化起来应该也就不难了。这篇文章主要讲述最近一次 CMS GC 优化过程，是一次分享，也是一次总结。闲话少说，我们开始吧。</p>
-  <footer>
-    <ul class="actions">
-      <li><a href="https://andyyin.github.io/blog/phantomreference-%E5%AF%BC%E8%87%B4-cms-gc-%E8%80%97%E6%97%B6%E4%B8%A5%E9%87%8D/" class="button big">阅读</a></li>
-    </ul>
-  <ul class="stats">
-  <li class="categories">
-    <ul>
-        
-            
-            
-                <i class="fa fa-folder"></i>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/categories/jvm">JVM</a></li>
-                
-            
-        
-    </ul>
-  </li>
-  <li class="tags">
-    <ul>
-        
-            
-            
-                <i class="fa fa-tags"></i>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/cms-gc">CMS GC</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E4%BC%98%E5%8C%96">优化</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/phantomreference">PhantomReference</a></li>
-                
-            
-        
-    </ul>
-  </li>
-</ul>
-
-  </footer>
-</article>
-
-        
-            <article class="post">
-  <header>
-    <div class="title">
-        
-            <h2><a href="https://andyyin.github.io/blog/system.gc-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/">System.gc() 源码解读</a></h2>
-        
-        
-    </div>
-    <div class="meta">
-        
-
-        <time class="published"
-            datetime='2018-01-14'>
-            2018-01-14</time>
-        <span class="author">涤生</span>
-        
-            <p>4 分钟阅读</p>
-        
-        
-    </div>
-</header>
-
-  
-
-  
-  <p>System.gc()，大家应该也有所了解，是 JDK 提供的触发 Full GC 的一种方式，会触发 Full GC，其间会 stop the world，对业务影响较大，一般情况下不会直接使用。</p>
-  <footer>
-    <ul class="actions">
-      <li><a href="https://andyyin.github.io/blog/system.gc-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB/" class="button big">阅读</a></li>
-    </ul>
-  <ul class="stats">
-  <li class="categories">
-    <ul>
-        
-            
-            
-                <i class="fa fa-folder"></i>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/categories/gc">GC</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/categories/jvm">JVM</a></li>
-                
-            
-        
-    </ul>
-  </li>
-  <li class="tags">
-    <ul>
-        
-            
-            
-                <i class="fa fa-tags"></i>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/java">Java</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/jvm">JVM</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/gc">GC</a></li>
-                
-                
-                <li><a class="article-category-link" href="https://andyyin.github.io/tags/system.gc">System.gc()</a></li>
-                
-            
-        
-    </ul>
-  </li>
-</ul>
-
-  </footer>
-</article>
-
-        
 
         
 <ul class="actions pagination">
@@ -1277,6 +1278,34 @@
           <article class="mini-post">
             <header>
               <h3>
+                <a href="https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/">简单的 HTTP 调用，为什么时延这么大？</a>
+              </h3>
+              
+              <time class="published" datetime='2019-07-14'>
+                2019-07-14
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-%E4%BD%95%E6%97%B6%E4%BC%9A%E8%BF%9B%E8%A1%8C-full-gc/">JVM 源码解读之 CMS 何时会进行 Full GC</a>
+              </h3>
+              
+              <time class="published" datetime='2019-06-15'>
+                2019-06-15
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
                 <a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a>
               </h3>
               
@@ -1316,34 +1345,6 @@
 
           </article>
         
-          <article class="mini-post">
-            <header>
-              <h3>
-                <a href="https://andyyin.github.io/blog/%E9%AB%98%E5%90%9E%E5%90%90%E4%BD%8E%E5%BB%B6%E8%BF%9F-java-%E5%BA%94%E7%94%A8%E7%9A%84-gc-%E4%BC%98%E5%8C%96/">[译]高吞吐低延迟 Java 应用的 GC 优化</a>
-              </h3>
-              
-              <time class="published" datetime='2019-04-21'>
-                2019-04-21
-              </time>
-            </header>
-            
-
-          </article>
-        
-          <article class="mini-post">
-            <header>
-              <h3>
-                <a href="https://andyyin.github.io/blog/%E6%8A%80%E6%9C%AF%E4%BA%BA%E8%AF%A5%E6%9C%89%E7%9A%84%E7%9A%84%E5%85%AD%E4%B8%AA%E6%84%8F%E8%AF%86/">技术人该有的六个意识</a>
-              </h3>
-              
-              <time class="published" datetime='2019-04-15'>
-                2019-04-15
-              </time>
-            </header>
-            
-
-          </article>
-        
       </div>
 
       
@@ -1377,7 +1378,7 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/java/">Java</a>
-                <span style="float:right;">11</span>
+                <span style="float:right;">13</span>
               
             </header>
           </article>
@@ -1388,7 +1389,7 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/gc/">GC</a>
-                <span style="float:right;">10</span>
+                <span style="float:right;">11</span>
               
             </header>
           </article>
@@ -1399,7 +1400,7 @@
             <header>
               
                 <a href="https://andyyin.github.io/categories/jvm/">JVM</a>
-                <span style="float:right;">8</span>
+                <span style="float:right;">9</span>
               
             </header>
           </article>
@@ -1408,6 +1409,17 @@
         <p>
           <article>
             <header>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/http/">HTTP</a>
+                <span style="float:right;">1</span>
               
             </header>
           </article>

@@ -1,0 +1,1228 @@
+<!DOCTYPE HTML>
+
+<html>
+    <head>
+        <script type="application/ld+json">
+    {
+        "@context" : "http://schema.org",
+        "@type" : "BlogPosting",
+        "mainEntityOfPage": {
+             "@type": "WebPage",
+             "@id": "https://andyyin.github.io"
+        },
+        "articleSection" : "blog",
+        "name" : "简单的 HTTP 调用，为什么时延这么大？",
+        "headline" : "简单的 HTTP 调用，为什么时延这么大？",
+        "description" : "1. 背景 最近项目测试遇到个奇怪的现象，在测试环境通过 Apache HttpClient 调用后端的 HTTP 服务，平均耗时居然接近 39.2ms。可能你乍一看觉得这不是很正常吗，有什么好奇怪的？其实不然，我再来说下一些基本信息，该后端的 HTTP 服务并没有什么业务逻辑，只是将一段字符串转成大写然后返回，字符串长度也仅只有 100 字符，另外网络 ping 延时只有 1.9ms 左右。因此，理论上该调用耗时应该在 2-3ms 左右，但为什么平均耗时 39.2ms 呢？
+由于工作原因，调用耗时的问题，对我来说，已经见怪不怪了，经常会帮业务解决内部 RPC 框架调用超时的相关问题，但是 HTTP 调用耗时第一次遇到。不过，排查问题的套路是一样的。主要方法论无外乎由外而内、至上而下等排查方法。我们先来看看外围的一些指标，看能否发现蛛丝马迹。
+2. 外围指标 2.1 系统指标 主要看外围的一些系统指标（注意：调用与被调用的机器都要看）。例如负载、CPU。只需一个 top 命令就能一览无余。
+因此，确认了下 CPU 和负载都很空闲。由于当时没有截图，这里就不放图了。
+2.2 进程指标 Java 程序进程指标主要看 GC、线程堆栈情况（注意：调用与被调用的机器都要看）。
+Young GC 都非常少，而且耗时也在 10ms 以内，因此没有长时间的 STW。
+因为平均调用时间 39.2ms，比较大，如果耗时是代码导致，线程堆栈应该能发现点啥。看了之后一无所获，服务的相关线程堆栈主要表现是线程池的线程在等任务，这就意味着线程并不忙。
+是不是感觉黔驴技穷了，接下来该怎么办呢？
+3. 本地复现 如果本地（本地是 MAC 系统）能复现，对排查问题也是极好的。
+因此在本地使用 Apache HttpClient 写了个简单 Test 程序，直接调用后端的 HTTP 服务，发现平均耗时在 55ms 左右。咦，怎么跟测试环境 39.2ms 的结果有点区别。主要是本地与测试环境的后端的 HTTP 服务机器跨地区了，ping 时延在 26ms 左右，所以延时增大了。不过本地确实也是存在问题的，因为ping 时延是 26ms，后端 HTTP 服务逻辑简单，几乎不耗时，因此本地调用平均耗时应该在 26ms 左右，为什么是 55ms？",
+        "inLanguage" : "zh",
+        "author" : "",
+        "creator" : "",
+        "publisher": "",
+        "accountablePerson" : "",
+        "copyrightHolder" : "",
+        "copyrightYear" : "2019",
+        "datePublished": "2019-07-14 00:00:00 &#43;0000 UTC",
+        "dateModified" : "2019-07-14 00:00:00 &#43;0000 UTC",
+        "url" : "https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/",
+        "wordCount" : "595",
+        "keywords" : [ "HTTP","时延","HTTPServer","Nagle","Delayed ACK","Blog" ]
+    }
+    </script>
+        
+            
+                <title>简单的 HTTP 调用，为什么时延这么大？</title>
+            
+        
+
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content="Hugo 0.54.0" />
+        
+
+
+        
+            <meta name="author" content="涤生">
+        
+        
+            
+                <meta name="description" content="涤生的博客，主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。">
+            
+        
+
+        <meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="简单的 HTTP 调用，为什么时延这么大？"/>
+<meta name="twitter:description" content="1. 背景 最近项目测试遇到个奇怪的现象，在测试环境通过 Apache HttpClient 调用后端的 HTTP 服务，平均耗时居然接近 39.2ms。可能你乍一看觉得这不是很正常吗，有什么好奇怪的？其实不然，我再来说下一些基本信息，该后端的 HTTP 服务并没有什么业务逻辑，只是将一段字符串转成大写然后返回，字符串长度也仅只有 100 字符，另外网络 ping 延时只有 1.9ms 左右。因此，理论上该调用耗时应该在 2-3ms 左右，但为什么平均耗时 39.2ms 呢？
+由于工作原因，调用耗时的问题，对我来说，已经见怪不怪了，经常会帮业务解决内部 RPC 框架调用超时的相关问题，但是 HTTP 调用耗时第一次遇到。不过，排查问题的套路是一样的。主要方法论无外乎由外而内、至上而下等排查方法。我们先来看看外围的一些指标，看能否发现蛛丝马迹。
+2. 外围指标 2.1 系统指标 主要看外围的一些系统指标（注意：调用与被调用的机器都要看）。例如负载、CPU。只需一个 top 命令就能一览无余。
+因此，确认了下 CPU 和负载都很空闲。由于当时没有截图，这里就不放图了。
+2.2 进程指标 Java 程序进程指标主要看 GC、线程堆栈情况（注意：调用与被调用的机器都要看）。
+Young GC 都非常少，而且耗时也在 10ms 以内，因此没有长时间的 STW。
+因为平均调用时间 39.2ms，比较大，如果耗时是代码导致，线程堆栈应该能发现点啥。看了之后一无所获，服务的相关线程堆栈主要表现是线程池的线程在等任务，这就意味着线程并不忙。
+是不是感觉黔驴技穷了，接下来该怎么办呢？
+3. 本地复现 如果本地（本地是 MAC 系统）能复现，对排查问题也是极好的。
+因此在本地使用 Apache HttpClient 写了个简单 Test 程序，直接调用后端的 HTTP 服务，发现平均耗时在 55ms 左右。咦，怎么跟测试环境 39.2ms 的结果有点区别。主要是本地与测试环境的后端的 HTTP 服务机器跨地区了，ping 时延在 26ms 左右，所以延时增大了。不过本地确实也是存在问题的，因为ping 时延是 26ms，后端 HTTP 服务逻辑简单，几乎不耗时，因此本地调用平均耗时应该在 26ms 左右，为什么是 55ms？"/>
+
+        <meta property="og:title" content="简单的 HTTP 调用，为什么时延这么大？" />
+<meta property="og:description" content="1. 背景 最近项目测试遇到个奇怪的现象，在测试环境通过 Apache HttpClient 调用后端的 HTTP 服务，平均耗时居然接近 39.2ms。可能你乍一看觉得这不是很正常吗，有什么好奇怪的？其实不然，我再来说下一些基本信息，该后端的 HTTP 服务并没有什么业务逻辑，只是将一段字符串转成大写然后返回，字符串长度也仅只有 100 字符，另外网络 ping 延时只有 1.9ms 左右。因此，理论上该调用耗时应该在 2-3ms 左右，但为什么平均耗时 39.2ms 呢？
+由于工作原因，调用耗时的问题，对我来说，已经见怪不怪了，经常会帮业务解决内部 RPC 框架调用超时的相关问题，但是 HTTP 调用耗时第一次遇到。不过，排查问题的套路是一样的。主要方法论无外乎由外而内、至上而下等排查方法。我们先来看看外围的一些指标，看能否发现蛛丝马迹。
+2. 外围指标 2.1 系统指标 主要看外围的一些系统指标（注意：调用与被调用的机器都要看）。例如负载、CPU。只需一个 top 命令就能一览无余。
+因此，确认了下 CPU 和负载都很空闲。由于当时没有截图，这里就不放图了。
+2.2 进程指标 Java 程序进程指标主要看 GC、线程堆栈情况（注意：调用与被调用的机器都要看）。
+Young GC 都非常少，而且耗时也在 10ms 以内，因此没有长时间的 STW。
+因为平均调用时间 39.2ms，比较大，如果耗时是代码导致，线程堆栈应该能发现点啥。看了之后一无所获，服务的相关线程堆栈主要表现是线程池的线程在等任务，这就意味着线程并不忙。
+是不是感觉黔驴技穷了，接下来该怎么办呢？
+3. 本地复现 如果本地（本地是 MAC 系统）能复现，对排查问题也是极好的。
+因此在本地使用 Apache HttpClient 写了个简单 Test 程序，直接调用后端的 HTTP 服务，发现平均耗时在 55ms 左右。咦，怎么跟测试环境 39.2ms 的结果有点区别。主要是本地与测试环境的后端的 HTTP 服务机器跨地区了，ping 时延在 26ms 左右，所以延时增大了。不过本地确实也是存在问题的，因为ping 时延是 26ms，后端 HTTP 服务逻辑简单，几乎不耗时，因此本地调用平均耗时应该在 26ms 左右，为什么是 55ms？" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/" />
+<meta property="article:published_time" content="2019-07-14T00:00:00&#43;00:00"/>
+<meta property="article:modified_time" content="2019-07-14T00:00:00&#43;00:00"/>
+
+        <meta property="og:image" content="https://andyyin.github.io/images/logo.png">
+        <meta property="og:image:type" content="image/png">
+        <meta property="og:image:width" content="512">
+        <meta property="og:image:height" content="512">
+        
+<meta itemprop="name" content="简单的 HTTP 调用，为什么时延这么大？">
+<meta itemprop="description" content="1. 背景 最近项目测试遇到个奇怪的现象，在测试环境通过 Apache HttpClient 调用后端的 HTTP 服务，平均耗时居然接近 39.2ms。可能你乍一看觉得这不是很正常吗，有什么好奇怪的？其实不然，我再来说下一些基本信息，该后端的 HTTP 服务并没有什么业务逻辑，只是将一段字符串转成大写然后返回，字符串长度也仅只有 100 字符，另外网络 ping 延时只有 1.9ms 左右。因此，理论上该调用耗时应该在 2-3ms 左右，但为什么平均耗时 39.2ms 呢？
+由于工作原因，调用耗时的问题，对我来说，已经见怪不怪了，经常会帮业务解决内部 RPC 框架调用超时的相关问题，但是 HTTP 调用耗时第一次遇到。不过，排查问题的套路是一样的。主要方法论无外乎由外而内、至上而下等排查方法。我们先来看看外围的一些指标，看能否发现蛛丝马迹。
+2. 外围指标 2.1 系统指标 主要看外围的一些系统指标（注意：调用与被调用的机器都要看）。例如负载、CPU。只需一个 top 命令就能一览无余。
+因此，确认了下 CPU 和负载都很空闲。由于当时没有截图，这里就不放图了。
+2.2 进程指标 Java 程序进程指标主要看 GC、线程堆栈情况（注意：调用与被调用的机器都要看）。
+Young GC 都非常少，而且耗时也在 10ms 以内，因此没有长时间的 STW。
+因为平均调用时间 39.2ms，比较大，如果耗时是代码导致，线程堆栈应该能发现点啥。看了之后一无所获，服务的相关线程堆栈主要表现是线程池的线程在等任务，这就意味着线程并不忙。
+是不是感觉黔驴技穷了，接下来该怎么办呢？
+3. 本地复现 如果本地（本地是 MAC 系统）能复现，对排查问题也是极好的。
+因此在本地使用 Apache HttpClient 写了个简单 Test 程序，直接调用后端的 HTTP 服务，发现平均耗时在 55ms 左右。咦，怎么跟测试环境 39.2ms 的结果有点区别。主要是本地与测试环境的后端的 HTTP 服务机器跨地区了，ping 时延在 26ms 左右，所以延时增大了。不过本地确实也是存在问题的，因为ping 时延是 26ms，后端 HTTP 服务逻辑简单，几乎不耗时，因此本地调用平均耗时应该在 26ms 左右，为什么是 55ms？">
+
+
+<meta itemprop="datePublished" content="2019-07-14T00:00:00&#43;00:00" />
+<meta itemprop="dateModified" content="2019-07-14T00:00:00&#43;00:00" />
+<meta itemprop="wordCount" content="595">
+
+
+
+<meta itemprop="keywords" content="HTTP,时延,HTTPServer,Nagle,Delayed ACK," />
+
+        
+
+        
+            
+        
+
+        
+        
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css">
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway:400,800,900|Source+Sans+Pro:400,700">
+            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/main.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/add-on.css">
+            <link rel="stylesheet" href="https://andyyin.github.io/css/academicons.min.css">
+        
+
+        
+            
+                
+            
+        
+
+
+  
+    
+    <link href='//cdn.bootcss.com/highlight.js/9.11.0/styles/github.min.css' rel='stylesheet' type='text/css' />
+  
+
+
+      
+    </head>
+    <body>
+
+      
+      <div id="wrapper">
+
+    
+    
+<header id="header">
+    
+      <h1><a href="https://andyyin.github.io/">涤生|个人博客</a></h1>
+    
+
+    <nav class="links">
+        <ul>
+            
+                <li>
+                    <a href="https://andyyin.github.io/">
+                            <i class="fa fa-home">&nbsp;</i>主页
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/blog/">
+                            <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/categories/">
+                            <i class="fa fa-sitemap">&nbsp;</i>分类
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/about/">
+                            <i class="fa fa-id-card-o">&nbsp;</i>关于
+                    </a>
+                </li>
+            
+                <li>
+                    <a href="https://andyyin.github.io/links/">
+                            <i class="fa fa-link">&nbsp;</i>友链
+                    </a>
+                </li>
+            
+        </ul>
+    </nav>
+    <nav class="main">
+        <ul>
+            
+            <li id="share-nav" class="share-menu" style="display:none;">
+                <a class="fa-share-alt" href="#share-menu">Share</a>
+            </li>
+            
+            <li class="search">
+                <a class="fa-search" href="#search">Search</a>
+                <form id="search" method="get" action="//google.com/search">
+                    <input type="text" name="q" placeholder="Search" />
+                    <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+                </form>
+            </li>
+            <li class="menu">
+                <a class="fa-bars" href="#menu">Menu</a>
+            </li>
+        </ul>
+    </nav>
+</header>
+
+
+<section id="menu">
+
+    
+        <section>
+            <form class="search" method="get" action="//google.com/search">
+                <input type="text" name="q" placeholder="Search" />
+                <input type="hidden" name="as_sitesearch" value="https://andyyin.github.io">
+            </form>
+        </section>
+
+    
+        <section>
+            <ul class="links">
+                
+                    <li>
+                        <a href="https://andyyin.github.io/">
+                            <h3>
+                                <i class="fa fa-home">&nbsp;</i>主页
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/blog/">
+                            <h3>
+                                <i class="fa fa-newspaper-o">&nbsp;</i>博客
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/categories/">
+                            <h3>
+                                <i class="fa fa-sitemap">&nbsp;</i>分类
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/about/">
+                            <h3>
+                                <i class="fa fa-id-card-o">&nbsp;</i>关于
+                            </h3>
+                        </a>
+                    </li>
+                
+                    <li>
+                        <a href="https://andyyin.github.io/links/">
+                            <h3>
+                                <i class="fa fa-link">&nbsp;</i>友链
+                            </h3>
+                        </a>
+                    </li>
+                
+            </ul>
+        </section>
+
+    
+        <section class="recent-posts">
+            <div class="mini-posts">
+                <header>
+                    <h3>Recent Posts</h3>
+                </header>
+                
+
+                
+                    
+                
+
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/">简单的 HTTP 调用，为什么时延这么大？</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-07-14'>
+                                    July 14, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-%E4%BD%95%E6%97%B6%E4%BC%9A%E8%BF%9B%E8%A1%8C-full-gc/">JVM 源码解读之 CMS 何时会进行 Full GC</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-06-15'>
+                                    June 15, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-06-07'>
+                                    June 7, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-19'>
+                                    May 19, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+                        <article class="mini-post">
+                            <header>
+                                <h3><a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a></h3>
+                                
+                                <time class="published" datetime=
+                                    '2019-05-09'>
+                                    May 9, 2019</time>
+                            </header>
+                            
+
+                        </article>
+                
+
+                
+                    <a href=
+                        
+                            /blog/
+                        
+                        class="button">更多</a>
+                
+            </div>
+        </section>
+
+    
+        
+</section>
+
+    <section id="share-menu">
+    <section id="social-share-nav">
+        <ul class="links">
+            <header>
+                <h3>Share this post <i class="fa fa-smile-o"></i></h3>
+            </header>
+            
+
+
+
+<li>
+  <a href="//twitter.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E7%25AE%2580%25E5%258D%2595%25E7%259A%2584-http-%25E8%25B0%2583%25E7%2594%25A8%25E4%25B8%25BA%25E4%25BB%2580%25E4%25B9%2588%25E6%2597%25B6%25E5%25BB%25B6%25E8%25BF%2599%25E4%25B9%2588%25E5%25A4%25A7%2f&amp;text=%e7%ae%80%e5%8d%95%e7%9a%84%20HTTP%20%e8%b0%83%e7%94%a8%ef%bc%8c%e4%b8%ba%e4%bb%80%e4%b9%88%e6%97%b6%e5%bb%b6%e8%bf%99%e4%b9%88%e5%a4%a7%ef%bc%9f&amp;via=" target="_blank" class="share-btn twitter">
+    <i class="fa fa-twitter"></i>
+    <p>Twitter</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//plus.google.com/share?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E7%25AE%2580%25E5%258D%2595%25E7%259A%2584-http-%25E8%25B0%2583%25E7%2594%25A8%25E4%25B8%25BA%25E4%25BB%2580%25E4%25B9%2588%25E6%2597%25B6%25E5%25BB%25B6%25E8%25BF%2599%25E4%25B9%2588%25E5%25A4%25A7%2f" target="_blank" class="share-btn google-plus">
+    <i class="fa fa-google-plus"></i>
+    <p>Google+</p>
+  </a>
+</li>
+
+
+
+
+
+<li>
+  <a href="//www.facebook.com/sharer/sharer.php?u=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E7%25AE%2580%25E5%258D%2595%25E7%259A%2584-http-%25E8%25B0%2583%25E7%2594%25A8%25E4%25B8%25BA%25E4%25BB%2580%25E4%25B9%2588%25E6%2597%25B6%25E5%25BB%25B6%25E8%25BF%2599%25E4%25B9%2588%25E5%25A4%25A7%2f" target="_blank" class="share-btn facebook">
+    <i class="fa fa-facebook"></i>
+    <p>Facebook</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//reddit.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E7%25AE%2580%25E5%258D%2595%25E7%259A%2584-http-%25E8%25B0%2583%25E7%2594%25A8%25E4%25B8%25BA%25E4%25BB%2580%25E4%25B9%2588%25E6%2597%25B6%25E5%25BB%25B6%25E8%25BF%2599%25E4%25B9%2588%25E5%25A4%25A7%2f&amp;title=%e7%ae%80%e5%8d%95%e7%9a%84%20HTTP%20%e8%b0%83%e7%94%a8%ef%bc%8c%e4%b8%ba%e4%bb%80%e4%b9%88%e6%97%b6%e5%bb%b6%e8%bf%99%e4%b9%88%e5%a4%a7%ef%bc%9f" target="_blank" class="share-btn reddit">
+    <i class="fa fa-reddit-alien"></i>
+    <p>Reddit</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.linkedin.com/shareArticle?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E7%25AE%2580%25E5%258D%2595%25E7%259A%2584-http-%25E8%25B0%2583%25E7%2594%25A8%25E4%25B8%25BA%25E4%25BB%2580%25E4%25B9%2588%25E6%2597%25B6%25E5%25BB%25B6%25E8%25BF%2599%25E4%25B9%2588%25E5%25A4%25A7%2f&amp;title=%e7%ae%80%e5%8d%95%e7%9a%84%20HTTP%20%e8%b0%83%e7%94%a8%ef%bc%8c%e4%b8%ba%e4%bb%80%e4%b9%88%e6%97%b6%e5%bb%b6%e8%bf%99%e4%b9%88%e5%a4%a7%ef%bc%9f" target="_blank" class="share-btn linkedin">
+      <i class="fa fa-linkedin"></i>
+      <p>LinkedIn</p>
+    </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.stumbleupon.com/submit?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E7%25AE%2580%25E5%258D%2595%25E7%259A%2584-http-%25E8%25B0%2583%25E7%2594%25A8%25E4%25B8%25BA%25E4%25BB%2580%25E4%25B9%2588%25E6%2597%25B6%25E5%25BB%25B6%25E8%25BF%2599%25E4%25B9%2588%25E5%25A4%25A7%2f&amp;title=%e7%ae%80%e5%8d%95%e7%9a%84%20HTTP%20%e8%b0%83%e7%94%a8%ef%bc%8c%e4%b8%ba%e4%bb%80%e4%b9%88%e6%97%b6%e5%bb%b6%e8%bf%99%e4%b9%88%e5%a4%a7%ef%bc%9f" target="_blank" class="share-btn stumbleupon">
+    <i class="fa fa-stumbleupon"></i>
+    <p>StumbleUpon</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="//www.pinterest.com/pin/create/button/?url=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E7%25AE%2580%25E5%258D%2595%25E7%259A%2584-http-%25E8%25B0%2583%25E7%2594%25A8%25E4%25B8%25BA%25E4%25BB%2580%25E4%25B9%2588%25E6%2597%25B6%25E5%25BB%25B6%25E8%25BF%2599%25E4%25B9%2588%25E5%25A4%25A7%2f&amp;description=%e7%ae%80%e5%8d%95%e7%9a%84%20HTTP%20%e8%b0%83%e7%94%a8%ef%bc%8c%e4%b8%ba%e4%bb%80%e4%b9%88%e6%97%b6%e5%bb%b6%e8%bf%99%e4%b9%88%e5%a4%a7%ef%bc%9f" target="_blank" class="share-btn pinterest">
+    <i class="fa fa-pinterest-p"></i>
+    <p>Pinterest</p>
+  </a>
+</li>
+
+
+
+
+<li>
+  <a href="mailto:?subject=Check out this post by %e6%b6%a4%e7%94%9f&amp;body=https%3a%2f%2fandyyin.github.io%2fblog%2f%25E7%25AE%2580%25E5%258D%2595%25E7%259A%2584-http-%25E8%25B0%2583%25E7%2594%25A8%25E4%25B8%25BA%25E4%25BB%2580%25E4%25B9%2588%25E6%2597%25B6%25E5%25BB%25B6%25E8%25BF%2599%25E4%25B9%2588%25E5%25A4%25A7%2f" target="_blank" class="share-btn email">
+    <i class="fa fa-envelope"></i>
+    <p>Email</p>
+  </a>
+</li>
+
+
+        </ul>
+    </section>
+</section>
+
+    
+    <div id="main">
+        
+        
+        <article class="post">
+  <header>
+    <div class="title">
+        
+            <h1><a href="https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/">简单的 HTTP 调用，为什么时延这么大？</a></h1>
+            
+        
+        
+    </div>
+    <div class="meta">
+        
+
+        <time class="published"
+            datetime='2019-07-14'>
+            2019-07-14</time>
+        <span class="author">涤生</span>
+        
+            <p>3 分钟阅读</p>
+        
+        
+    </div>
+</header>
+
+
+  
+
+  
+
+  <div id="content">
+    
+
+<h2 id="1-背景">1. 背景</h2>
+
+<p>最近项目测试遇到个奇怪的现象，在测试环境通过 Apache HttpClient 调用后端的 HTTP 服务，平均耗时居然接近 <strong>39.2ms</strong>。可能你乍一看觉得这不是很正常吗，有什么好奇怪的？其实不然，我再来说下一些基本信息，该后端的 HTTP 服务并没有什么业务逻辑，只是将一段字符串转成大写然后返回，字符串长度也仅只有 <strong>100</strong> 字符，另外网络 ping 延时只有 <strong>1.9ms</strong> 左右。因此，理论上该调用耗时应该在 <strong>2-3ms</strong> 左右，但为什么平均耗时 <strong>39.2ms</strong> 呢？</p>
+
+<p><img src="https://andyyin.github.io/img/2019/07/httpoptimized/invoke-delay.png" alt="调用时延" />
+<img src="https://andyyin.github.io/img/2019/07/httpoptimized/ping-delay.png" alt="ping 时延" /></p>
+
+<p>由于工作原因，调用耗时的问题，对我来说，已经见怪不怪了，经常会帮业务解决内部 RPC 框架调用超时的相关问题，但是 HTTP 调用耗时第一次遇到。不过，排查问题的套路是一样的。主要方法论无外乎由外而内、至上而下等排查方法。我们先来看看外围的一些指标，看能否发现蛛丝马迹。</p>
+
+<h2 id="2-外围指标">2. 外围指标</h2>
+
+<h3 id="2-1-系统指标">2.1 系统指标</h3>
+
+<p>主要看外围的一些系统指标（注意：<strong>调用与被调用的机器</strong>都要看）。例如负载、CPU。只需一个 top 命令就能一览无余。</p>
+
+<p>因此，确认了下 CPU 和负载都很空闲。由于当时没有截图，这里就不放图了。</p>
+
+<h3 id="2-2-进程指标">2.2 进程指标</h3>
+
+<p>Java 程序进程指标主要看 GC、线程堆栈情况（注意：<strong>调用与被调用的机器</strong>都要看）。</p>
+
+<p>Young GC 都非常少，而且耗时也在 <strong>10ms</strong> 以内，因此没有长时间的 STW。</p>
+
+<p>因为平均调用时间 39.2ms，比较大，如果耗时是代码导致，线程堆栈应该能发现点啥。看了之后一无所获，服务的相关线程堆栈主要表现是线程池的线程在等任务，这就意味着线程并不忙。</p>
+
+<p>是不是感觉黔驴技穷了，接下来该怎么办呢？</p>
+
+<h2 id="3-本地复现">3. 本地复现</h2>
+
+<p>如果本地（本地是 MAC 系统）能复现，对排查问题也是极好的。</p>
+
+<p>因此在本地使用 Apache HttpClient 写了个简单 Test 程序，直接调用后端的 HTTP 服务，发现平均耗时在 <strong>55ms</strong> 左右。咦，怎么跟测试环境 <strong>39.2ms</strong> 的结果有点区别。主要是本地与测试环境的后端的 HTTP 服务机器跨地区了，ping 时延在 <strong>26ms</strong> 左右，所以延时增大了。不过本地确实也是存在问题的，因为ping 时延是 <strong>26ms</strong>，后端 HTTP 服务逻辑简单，几乎不耗时，因此本地调用平均耗时应该在 <strong>26ms</strong> 左右，为什么是 <strong>55ms</strong>？</p>
+
+<p>是不是越来越迷惑，一头雾水，不知如何下手？</p>
+
+<p>期间怀疑过 Apache HttpClient 是不是有什么地方使用的不对，因此使用 JDK 自带的 HttpURLConnection 写了简单的程序，做了测试，结果一样。</p>
+
+<h2 id="4-诊断">4. 诊断</h2>
+
+<h3 id="4-1-定位">4.1 定位</h3>
+
+<p>其实从外围的系统指标、进程指标，以及本地复现来看，大致能够断定不是程序上的原因。那 TCP 协议层面呢？</p>
+
+<p>有网络编程经验的同学一定知道 TCP 什么参数会引起这个现象。对，你猜的没错，就是 TCP_NODELAY。</p>
+
+<p>那调用方和被调用方哪边的程序没有设置呢？</p>
+
+<p>调用方使用的是 Apache HttpClient ，tcpNoDelay 默认设置的就是 true。我们再来看看被调用方，也就是我们的后端 HTTP 服务，这个 HTTP 服务用的是 JDK自带的 HttpServer</p>
+
+<pre><code class="language-java">HttpServer server = HttpServer.create(new InetSocketAddress(config.getPort()), BACKLOGS);
+</code></pre>
+
+<p>居然没看到直接设置 tcpNoDelay 接口，翻了下源码。哦，原来在这里，在 ServerConfig 的类中有这段静态块，用来获取启动参数，默认 ServerConfig.noDelay 为 false。</p>
+
+<pre><code class="language-java">static {
+    AccessController.doPrivileged(new PrivilegedAction&lt;Void&gt;() {
+        public Void run() {
+            ServerConfig.idleInterval = Long.getLong(&quot;sun.net.httpserver.idleInterval&quot;, 30L) * 1000L;
+            ServerConfig.clockTick = Integer.getInteger(&quot;sun.net.httpserver.clockTick&quot;, 10000);
+            ServerConfig.maxIdleConnections = Integer.getInteger(&quot;sun.net.httpserver.maxIdleConnections&quot;, 200);
+            ServerConfig.drainAmount = Long.getLong(&quot;sun.net.httpserver.drainAmount&quot;, 65536L);
+            ServerConfig.maxReqHeaders = Integer.getInteger(&quot;sun.net.httpserver.maxReqHeaders&quot;, 200);
+            ServerConfig.maxReqTime = Long.getLong(&quot;sun.net.httpserver.maxReqTime&quot;, -1L);
+            ServerConfig.maxRspTime = Long.getLong(&quot;sun.net.httpserver.maxRspTime&quot;, -1L);
+            ServerConfig.timerMillis = Long.getLong(&quot;sun.net.httpserver.timerMillis&quot;, 1000L);
+            ServerConfig.debug = Boolean.getBoolean(&quot;sun.net.httpserver.debug&quot;);
+   	        ServerConfig.noDelay = Boolean.getBoolean(&quot;sun.net.httpserver.nodelay&quot;);
+            return null;
+        }
+    });
+}
+</code></pre>
+
+<h3 id="4-2-验证">4.2 验证</h3>
+
+<p>在后端 HTTP 服务，加上启动&rdquo;-Dsun.net.httpserver.nodelay=true&rdquo;参数，再试试。效果很明显，平均耗时从<strong>39.2ms</strong> 降到 <strong>2.8ms</strong>。
+<img src="https://andyyin.github.io/img/2019/07/httpoptimized/invoke-delay-optimized.png" alt="优化后调用时延" /></p>
+
+<p>问题是解决了，但是到这里如果你就此止步，那就太便宜了这个案例了，简直暴殄天物。因为还有一堆疑惑等着你呢？</p>
+
+<ul>
+<li>为什么加了 TCP_NODELAY ，时延就从 <strong>39.2ms</strong> 降低到 <strong>2.8ms</strong>？</li>
+<li>为什么本地测试的平均时延是 <strong>55ms</strong>，而不是 ping 的时延 <strong>26ms</strong>？</li>
+<li>TCP 协议究竟是怎么发送数据包的？</li>
+</ul>
+
+<p>来，我们接着乘热打铁。</p>
+
+<h2 id="5-解惑">5. 解惑</h2>
+
+<h3 id="5-1-tcp-nodelay-何许人也">5.1 TCP_NODELAY 何许人也？</h3>
+
+<p>在 Socket 编程中，TCP_NODELAY 选项是用来控制是否开启 Nagle 算法。在 Java 中，为 ture 表示关闭 Nagle 算法，为 false 表示打开 Nagle 算法。你一定会问 Nagle 算法是什么？</p>
+
+<h3 id="5-2-nagle-算法是什么鬼">5.2 Nagle 算法是什么鬼？</h3>
+
+<p>Nagle 算法是一种通过减少通过网络发送的数据包数量来提高 TCP/IP 网络效率的方法。它使用发明人 John Nagle 的名字来命名的，John Nagle 在 1984 年首次用这个算法来尝试解决福特汽车公司的网络拥塞问题。</p>
+
+<p>试想如果应用程序每次产生 1 个字节的数据，然后这 1 个字节数据又以网络数据包的形式发送到远端服务器，那么就很容易导致网络由于太多的数据包而过载。在这种典型情况下，传送一个只拥有1个字节有效数据的数据包，却要花费 40 个字节长包头（即 IP 头部 20 字节 + TCP 头部 20 字节）的额外开销，这种有效载荷（payload）的利用率是极其低下。</p>
+
+<p>Nagle 算法的内容比较简单，以下是伪代码：</p>
+
+<pre><code>if there is new data to send
+  if the window size &gt;= MSS and available data is &gt;= MSS
+    send complete MSS segment now
+  else
+    if there is unconfirmed data still in the pipe
+      enqueue data in the buffer until an acknowledge is received
+    else
+      send data immediately
+    end if
+  end if
+end if
+</code></pre>
+
+<p>具体的做法就是：</p>
+
+<ul>
+<li>如果发送内容大于等于 1 个 MSS， 立即发送；</li>
+<li>如果之前没有包未被 ACK， 立即发送；</li>
+<li>如果之前有包未被 ACK， 缓存发送内容；</li>
+<li>如果收到 ACK， 立即发送缓存的内容。
+（MSS 为 TCP 数据包每次能够传输的最大数据分段）</li>
+</ul>
+
+<h3 id="5-3-delayed-ack-又是什么玩意">5.3 Delayed ACK 又是什么玩意？</h3>
+
+<p>大家都知道 TCP 协议为了保证传输的可靠性，规定在接受到数据包时需要向对方发送一个确认。只是单纯的发送一个确认，代价会比较高（IP 头部 20 字节 + TCP 头部 20 字节）。<strong>TCP Delayed ACK（延迟确认）就是为了努力改善网络性能，来解决这个问题的，它将几个 ACK 响应组合合在一起成为单个响应，或者将 ACK 响应与响应数据一起发送给对方，从而减少协议开销</strong>。</p>
+
+<p>具体的做法是：</p>
+
+<ul>
+<li>当有响应数据要发送时，ACK 会随响应数据立即发送给对方；</li>
+<li>如果没有响应数据，ACK 将会延迟发送，以等待看是否有响应数据可以一起发送。在 Linux 系统中，默认这个延迟时间是 40ms；</li>
+<li>如果在等待发送 ACK 期间，对方的第二个数据包又到达了，这时要立即发送 ACK。但是如果对方的三个数据包相继到达，第三个数据段到达时是否立即发送 ACK，则取决于以上两条。</li>
+</ul>
+
+<h3 id="5-4-nagle-与-delayed-ack-一起会发生什么化学反应">5.4 Nagle 与 Delayed ACK 一起会发生什么化学反应？</h3>
+
+<p>Nagle 与 Delayed ACK 都能提高网络传输的效率，但在一起会好心办坏事。例如，以下这个场景：</p>
+
+<p>A 和 B 进行数据传输 : A 运行 Nagle 算法，B 运行 Delayed ACK 算法。</p>
+
+<p>如果 A 向 B 发一个数据包，B 由于 Delayed ACK 不会立即响应。而 A 使用 Nagle 算法，A 就会一直等 B 的 ACK，ACK 不来一直不发送第二个数据包，如果这两个数据包是应对同一个请求，那这个请求就会被耽误了 <strong>40ms</strong>。</p>
+
+<h3 id="5-5-抓个包玩玩吧">5.5 抓个包玩玩吧</h3>
+
+<p>我们来抓个包验证下吧，在后端HTTP服务上执行以下脚本，就可以轻松完成抓包过程。</p>
+
+<pre><code>sudo tcpdump -i eth0 tcp and host 10.48.159.165 -s 0 -w traffic.pcap
+</code></pre>
+
+<p>如下图，这是使用 Wireshark 分析包内容的展示，红框内是一个完整的 POST 请求处理过程，看 130 序号和 149 序号之间相差 40ms（0.1859 - 0.1448 = 0.0411s = 41ms），这个就是 Nagle 与 Delayed ACK 一起发送的化学反应，其中 10.48.159.165 运行的是 Delayed ACK，10.22.29.180 运行的是 Nagle 算法。10.22.29.180 在等 ACK，而 10.48.159.165 触发了 Delayed ACK，这样傻傻等了 40ms。</p>
+
+<p><img src="https://andyyin.github.io/img/2019/07/httpoptimized/test-traffic.png" alt="测试环境数据包分析" /></p>
+
+<p><strong>这也就解释了为什么测试环境耗时是 39.2ms，因为大部分都被 Delayed ACK 的 40ms 给耽误了。</strong></p>
+
+<p>但是本地复现时，为什么本地测试的平均时延是 <strong>55ms</strong>，而不是 ping 的时延 <strong>26ms</strong>？我们也来抓个包吧。</p>
+
+<p>如下图，红框内是一个完整的 POST 请求处理过程，看 8 序号和 9 序号之间相差 25ms 左右，再减去网络延时约是ping延时的一半 13ms，因此 Delayed Ack 约 12ms 左右（由于本地是 MAC 系统与 Linux 有些差异）。</p>
+
+<p><img src="https://andyyin.github.io/img/2019/07/httpoptimized/local-traffic.png" alt="本地环境数据包分析" /></p>
+
+<pre><code>1. Linux 使用的是 /proc/sys/net/ipv4/tcp_delack_min 这个系统配置来控制 Delayed ACK 的时间，Linux 默认是 40ms；
+2. MAC 是通过 net.inet.tcp.delayed_ack 系统配置来控制 Delayed ACK 的。
+  delayed_ack=0 responds after every packet (OFF)
+  delayed_ack=1 always employs delayed ack, 6 packets can get 1 ack 
+  delayed_ack=2 immediate ack after 2nd packet, 2 packets per ack  (Compatibility Mode)
+  delayed_ack=3 should auto detect when to employ delayed ack, 4packets per ack.  (DEFAULT)
+设置为 0 表示禁止延迟 ACK，设置为 1 表示总是延迟 ACK，设置为 2 表示每两个数据包回复一个 ACK，设置为 3 表示系统自动探测回复 ACK 的时机。
+</code></pre>
+
+<h3 id="5-6-为什么-tcp-nodelay-能够解决问题">5.6 为什么 TCP_NODELAY 能够解决问题？</h3>
+
+<p>TCP_NODELAY 关闭了 Nagle 算法，即使上个数据包的 ACK 没有到达，也会发送下个数据包，进而打破 Delayed ACK 造成的影响。一般在网络编程中，非常建议开启 TCP_NODELAY，来提升响应速度。</p>
+
+<p>当然也可以通过 Delayed ACK 相关系统的配置来解决问题，但由于需要修改机器配置，很不方便，因此，这种方式不太推荐。</p>
+
+<h2 id="6-总结">6. 总结</h2>
+
+<p>本文是从一个简单的 HTTP 调用，时延比较大而引发的一次问题排查过程。过程中，首先由外而内的分析了相关问题，然后定位问题并验证解决方案。最后刨根问底对 TCP 传输的中的 Nagle 与 Delayed ACK 做了全面的讲解，更加透测的剖析了该问题案例。</p>
+
+<hr />
+
+<blockquote>
+<p>涤生的博客。</p>
+
+<p>转载请注明原创出处，谢谢！</p>
+
+<p>欢迎关注我的微信公众号：「涤生的博客」，获取更多技术分享。</p>
+</blockquote>
+
+<p><img src="https://andyyin.github.io/img/main/officialAccount.jpg" alt="涤生-微信公共号" /></p>
+
+  </div>
+
+  <footer>
+    <ul class="stats">
+  <li class="categories">
+    <ul>
+        
+            
+            
+                <i class="fa fa-folder"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/java">Java</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/categories/http">HTTP</a></li>
+                
+            
+        
+    </ul>
+  </li>
+  <li class="tags">
+    <ul>
+        
+            
+            
+                <i class="fa fa-tags"></i>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/http">HTTP</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/%E6%97%B6%E5%BB%B6">时延</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/httpserver">HTTPServer</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/nagle">Nagle</a></li>
+                
+                
+                <li><a class="article-category-link" href="https://andyyin.github.io/tags/delayed-ack">Delayed ACK</a></li>
+                
+            
+        
+    </ul>
+  </li>
+</ul>
+
+  </footer>
+
+</article>
+
+<ul class="actions pagination">
+    
+        <li><a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-%E4%BD%95%E6%97%B6%E4%BC%9A%E8%BF%9B%E8%A1%8C-full-gc/"
+                class="button big previous">JVM 源码解读之 CMS 何时会进行 Full GC</a></li>
+    
+
+    
+</ul>
+
+
+    </div>
+    
+<section id="sidebar">
+
+  
+  <section id="intro">
+    
+    
+      
+        <a href='https://andyyin.github.io/'><img src="https://andyyin.github.io/img/main/disheng.jpg" class="intro-circle" width="100" alt="涤生的博客" /></a>
+      
+    
+    
+      <header>
+        <h2>涤生的博客</h2>
+        <p>主要分享 Java、JVM、中间件、架构设计、性能优化、Linux 底层技术等，欢迎支持加关注。</p>
+      </header>
+    
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+  </section>
+
+  
+  <section class="recent-posts">
+    <div class="mini-posts">
+      <header>
+        <h3>最新文章</h3>
+      </header>
+      <div class="posts-container">
+        
+
+        
+          
+        
+
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/">简单的 HTTP 调用，为什么时延这么大？</a>
+              </h3>
+              
+              <time class="published" datetime='2019-07-14'>
+                2019-07-14
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-%E4%BD%95%E6%97%B6%E4%BC%9A%E8%BF%9B%E8%A1%8C-full-gc/">JVM 源码解读之 CMS 何时会进行 Full GC</a>
+              </h3>
+              
+              <time class="published" datetime='2019-06-15'>
+                2019-06-15
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/jvm-%E6%BA%90%E7%A0%81%E8%A7%A3%E8%AF%BB%E4%B9%8B-cms-gc-%E8%A7%A6%E5%8F%91%E6%9D%A1%E4%BB%B6/">JVM 源码解读之 CMS GC 触发条件</a>
+              </h3>
+              
+              <time class="published" datetime='2019-06-07'>
+                2019-06-07
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/zookeeper-%E9%9B%86%E7%BE%A4%E9%AB%98%E5%8F%AF%E7%94%A8%E9%83%A8%E7%BD%B2%E8%AF%A6%E8%A7%A3/">Zookeeper 集群高可用部署详解</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-19'>
+                2019-05-19
+              </time>
+            </header>
+            
+
+          </article>
+        
+          <article class="mini-post">
+            <header>
+              <h3>
+                <a href="https://andyyin.github.io/blog/%E8%AE%A8%E8%AE%BA%E5%9C%A8-linux-control-groups-%E4%B8%AD%E8%BF%90%E8%A1%8C-java-%E5%BA%94%E7%94%A8%E7%A8%8B%E5%BA%8F%E7%9A%84%E6%9A%82%E5%81%9C%E9%97%AE%E9%A2%98/">[译]讨论在 Linux Control Groups 中运行 Java 应用程序的暂停问题</a>
+              </h3>
+              
+              <time class="published" datetime='2019-05-09'>
+                2019-05-09
+              </time>
+            </header>
+            
+
+          </article>
+        
+      </div>
+
+      
+        <a href=
+          
+            /blog/
+          
+        class="button">更多</a>
+      
+    </div>
+  </section>
+
+  
+  
+  
+  
+  
+    <section id="categories">
+      <header>
+        <h3>
+          <a href="https://andyyin.github.io/categories/">分类</a>
+        </h3>
+      </header>
+        
+          
+        
+
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/java/">Java</a>
+                <span style="float:right;">13</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/gc/">GC</a>
+                <span style="float:right;">11</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/jvm/">JVM</a>
+                <span style="float:right;">9</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/http/">HTTP</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/zookeeper/">Zookeeper</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%AE%A1%E7%90%86/">管理</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+        <p>
+          <article>
+            <header>
+              
+                <a href="https://andyyin.github.io/categories/%E7%B3%BB%E7%BB%9F%E8%AE%BE%E8%AE%A1/">系统设计</a>
+                <span style="float:right;">1</span>
+              
+            </header>
+          </article>
+        </p>
+        
+    </section>
+  
+  
+
+  
+  
+    <section id="mini-bio">
+      <h3>关于我</h3>
+      <p>涤生，姓名殷琦，目前就职于某大型互联网公司基础架构部，主要负责微服务框架、服务治理、Serverless 相关工作。 《高可用可伸缩微服务架构：基于Dubbo、Spring Cloud和Service Mesh》的作者之一，《Knative 入门》图书翻译之一。 </p>
+      <a href="https://andyyin.github.io/about/" class="button">了解更多</a>
+    </section>
+  
+
+  
+  <section id="footer">
+    
+      <ul class="icons">
+        
+          
+    <li><a href="https://andyyin.github.io/index.xml" type="application/rss+xml" target="_blank" title="RSS" class="fa fa-rss"></a></li>
+
+
+        
+        
+  <li><a href="//github.com/andyyin" target="_blank" title="GitHub" class="fa fa-github"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="https://andyyin.github.io/img/main/wechat.jpeg" target="_blank" title="WeChat" class="fa fa-weixin"></a></li>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <li><a href="mailto:yyqqyinqi568@126.com" title="Email" class="fa fa-envelope"></a></li>
+
+
+      </ul>
+    
+    <p class="copyright">
+      
+        &copy; 2019
+        
+          涤生的博客
+        
+      .
+      Powered by <a href="https://andyyin.github.io/" target="_blank">涤生</a>
+    </p>
+  </section>
+</section>
+
+    </div>
+    <a id="back-to-top" href="#" class="fa fa-arrow-up fa-border fa-2x"></a>
+    
+
+    
+      
+    
+
+    
+      
+      
+      
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/highlight.min.js"></script>
+        
+        
+        
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/r.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/yaml.min.js"></script>
+        <script src="//cdn.bootcss.com/highlight.js/9.11.0/languages/css.min.js"></script>
+        <script>hljs.configure({languages: []}); hljs.initHighlightingOnLoad();</script>
+      
+    
+    
+    
+      <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/skel/3.0.1/skel.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.1.25/jquery.fancybox.min.js"></script>
+      <script src="https://andyyin.github.io/js/util.js"></script>
+      <script src="https://andyyin.github.io/js/main.js"></script>
+      <script src="https://andyyin.github.io/js/backToTop.js"></script>
+    
+
+    
+      
+        
+      
+    
+
+    
+    <script>hljs.initHighlightingOnLoad();</script>
+      <script src="//yihui.name/js/math-code.js"></script>
+<script async
+src="//cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+  </body>
+</html>
+

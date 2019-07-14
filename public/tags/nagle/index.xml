@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Nagle on 涤生的博客</title>
+    <link>https://andyyin.github.io/tags/nagle/</link>
+    <description>Recent content in Nagle on 涤生的博客</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh</language>
+    <lastBuildDate>Sun, 14 Jul 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://andyyin.github.io/tags/nagle/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>简单的 HTTP 调用，为什么时延这么大？</title>
+      <link>https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/</link>
+      <pubDate>Sun, 14 Jul 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://andyyin.github.io/blog/%E7%AE%80%E5%8D%95%E7%9A%84-http-%E8%B0%83%E7%94%A8%E4%B8%BA%E4%BB%80%E4%B9%88%E6%97%B6%E5%BB%B6%E8%BF%99%E4%B9%88%E5%A4%A7/</guid>
+      <description>1. 背景 最近项目测试遇到个奇怪的现象，在测试环境通过 Apache HttpClient 调用后端的 HTTP 服务，平均耗时居然接近 39.2ms。可能你乍一看觉得这不是很正常吗，有什么好奇怪的？其实不然，我再来说下一些基本信息，该后端的 HTTP 服务并没有什么业务逻辑，只是将一段字符串转成大写然后返回，字符串长度也仅只有 100 字符，另外网络 ping 延时只有 1.9ms 左右。因此，理论上该调用耗时应该在 2-3ms 左右，但为什么平均耗时 39.2ms 呢？
+由于工作原因，调用耗时的问题，对我来说，已经见怪不怪了，经常会帮业务解决内部 RPC 框架调用超时的相关问题，但是 HTTP 调用耗时第一次遇到。不过，排查问题的套路是一样的。主要方法论无外乎由外而内、至上而下等排查方法。我们先来看看外围的一些指标，看能否发现蛛丝马迹。
+2. 外围指标 2.1 系统指标 主要看外围的一些系统指标（注意：调用与被调用的机器都要看）。例如负载、CPU。只需一个 top 命令就能一览无余。
+因此，确认了下 CPU 和负载都很空闲。由于当时没有截图，这里就不放图了。
+2.2 进程指标 Java 程序进程指标主要看 GC、线程堆栈情况（注意：调用与被调用的机器都要看）。
+Young GC 都非常少，而且耗时也在 10ms 以内，因此没有长时间的 STW。
+因为平均调用时间 39.2ms，比较大，如果耗时是代码导致，线程堆栈应该能发现点啥。看了之后一无所获，服务的相关线程堆栈主要表现是线程池的线程在等任务，这就意味着线程并不忙。
+是不是感觉黔驴技穷了，接下来该怎么办呢？
+3. 本地复现 如果本地（本地是 MAC 系统）能复现，对排查问题也是极好的。
+因此在本地使用 Apache HttpClient 写了个简单 Test 程序，直接调用后端的 HTTP 服务，发现平均耗时在 55ms 左右。咦，怎么跟测试环境 39.2ms 的结果有点区别。主要是本地与测试环境的后端的 HTTP 服务机器跨地区了，ping 时延在 26ms 左右，所以延时增大了。不过本地确实也是存在问题的，因为ping 时延是 26ms，后端 HTTP 服务逻辑简单，几乎不耗时，因此本地调用平均耗时应该在 26ms 左右，为什么是 55ms？</description>
+    </item>
+    
+  </channel>
+</rss>

@@ -27,6 +27,7 @@ date = "2019-04-09"
 * [涤生的简书](https://www.jianshu.com/u/150f36a73910)
 * [涤生的腾讯云博客](https://cloud.tencent.com/developer/column/4692)
 * [涤生的知乎](https://www.zhihu.com/people/di-sheng-38-10/activities)
+* [涤生的开发者头条]https://toutiao.io/subjects/403257?f=new)
 
 <br/>
 <br/>
